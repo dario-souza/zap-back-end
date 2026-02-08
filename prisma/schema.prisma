@@ -1,0 +1,73 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
+  name      String
+  email     String    @unique
+  phone     String?
+  cpf       String?   @unique
+  address   String?
+  password  String
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  contacts  Contact[]
+  messages  Message[]
+
+  @@map("users")
+}
+
+model Contact {
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
+  name      String
+  phone     String
+  email     String?
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  userId    String    @db.ObjectId
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages  Message[]
+
+  @@index([userId])
+  @@map("contacts")
+}
+
+enum MessageStatus {
+  PENDING
+  SENT
+  FAILED
+  SCHEDULED
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  AUDIO
+  VIDEO
+}
+
+model Message {
+  id          String        @id @default(auto()) @map("_id") @db.ObjectId
+  content     String
+  type        MessageType   @default(TEXT)
+  status      MessageStatus @default(PENDING)
+  scheduledAt DateTime?     @map("scheduled_at")
+  sentAt      DateTime?     @map("sent_at")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+  userId      String        @db.ObjectId
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contactId   String        @db.ObjectId
+  contact     Contact       @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([contactId])
+  @@index([status])
+  @@map("messages")
+}

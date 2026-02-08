@@ -1,0 +1,30 @@
+{
+  "name": "whats-back-end",
+  "version": "1.0.0",
+  "description": "back-end-api-whats",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "node --no-warnings --env-file .env --experimental-strip-types --watch src/server.ts",
+    "test:db": "node --no-warnings --env-file .env --experimental-strip-types test-db.ts"
+  },
+  "author": "Dario de souza",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/bcrypt": "^6.0.0",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^24.2.1",
+    "prisma": "6.19",
+    "typescript": "^5.9.2"
+  },
+  "dependencies": {
+    "@prisma/client": "6.19",
+    "bcrypt": "^6.0.0",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.4",
+    "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2"
+  }
+}
