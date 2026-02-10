@@ -1,0 +1,15 @@
+
+> whats-back-end@1.0.0 dev
+> node --no-warnings --env-file .env --experimental-strip-types --watch src/server.ts
+
+🚀 Servidor rodando na porta 3001
+📡 Ambiente: development
+Erro ao obter QR Code: Error: Evolution API error: {"status":400,"error":"Bad Request","response":{"message":[["number is not of a type(s) string"]]}}
+    at EvolutionService.fetch (file:///home/dario/trabalhos-estudos/projetos/projeto-zap-reminder/zap-back-end/src/services/evolution.ts:39:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async EvolutionService.createInstance (file:///home/dario/trabalhos-estudos/projetos/projeto-zap-reminder/zap-back-end/src/services/evolution.ts:103:14)
+    at async EvolutionService.getQRCode (file:///home/dario/trabalhos-estudos/projetos/projeto-zap-reminder/zap-back-end/src/services/evolution.ts:144:9)
+    at async getQRCode (file:///home/dario/trabalhos-estudos/projetos/projeto-zap-reminder/zap-back-end/src/controllers/message.ts:345:20)
+Restarting 'src/server.ts'
+🚀 Servidor rodando na porta 3001
+📡 Ambiente: development

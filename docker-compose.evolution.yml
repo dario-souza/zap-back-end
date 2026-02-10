@@ -1,0 +1,45 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: evolution-postgres
+    restart: always
+    environment:
+      - POSTGRES_USER=evolution
+      - POSTGRES_PASSWORD=evolution_password
+      - POSTGRES_DB=evolution
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  evolution:
+    image: atendai/evolution-api:latest
+    container_name: evolution-api
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      - SERVER_URL=http://localhost:8080
+      - AUTHENTICATION_API_KEY=sua-chave-secreta-muito-forte-aqui
+      - AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES=true
+      # Database Configuration
+      - DATABASE_ENABLED=true
+      - DATABASE_PROVIDER=postgresql
+      - DATABASE_CONNECTION_URI=postgresql://evolution:evolution_password@postgres:5432/evolution?schema=public
+      # Cache Configuration
+      - CACHE_REDIS_ENABLED=false
+      - CACHE_LOCAL_ENABLED=true
+      # Configurações opcionais
+      - WEBHOOK_GLOBAL_ENABLED=false
+      - WEBHOOK_GLOBAL_URL=
+      - CONFIG_SESSION_PHONE_VERSION=2.3000.1025062854
+    volumes:
+      - evolution_store:/evolution/store
+      - evolution_logs:/evolution/logs
+    depends_on:
+      - postgres
+
+volumes:
+  evolution_store:
+  evolution_logs:
+  postgres_data:

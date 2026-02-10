@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express'
 import { prisma } from '../lib/prisma.ts'
 import { MessageType, MessageStatus } from '@prisma/client'
+import { evolutionService } from '../services/evolution.ts'
 
 export const getAllMessages = async (
   req: Request,
@@ -217,27 +218,158 @@ export const sendMessageNow = async (
       return
     }
 
-    const updatedMessage = await prisma.message.update({
-      where: { id },
-      data: {
-        status: MessageStatus.SENT,
-        sentAt: new Date(),
-      },
-      include: {
-        contact: {
-          select: {
-            name: true,
-            phone: true,
+    // Verifica se Evolution API está configurada
+    const isConnected = await evolutionService.checkConnection()
+    if (!isConnected) {
+      res.status(503).json({ 
+        error: 'WhatsApp não conectado. Configure a Evolution API primeiro.',
+        setup: 'Veja o arquivo WHATSAPP_SETUP.md'
+      })
+      return
+    }
+
+    // Envia mensagem via WhatsApp
+    try {
+      await evolutionService.sendTextMessage(
+        message.contact.phone,
+        message.content
+      )
+
+      // Atualiza status no banco
+      const updatedMessage = await prisma.message.update({
+        where: { id },
+        data: {
+          status: MessageStatus.SENT,
+          sentAt: new Date(),
+        },
+        include: {
+          contact: {
+            select: {
+              name: true,
+              phone: true,
+            },
           },
         },
-      },
-    })
+      })
 
-    res.json({
-      message: updatedMessage,
-      sent: true,
-    })
+      res.json({
+        message: updatedMessage,
+        sent: true,
+        via: 'whatsapp'
+      })
+    } catch (whatsappError: any) {
+      // Se falhar no WhatsApp, marca como falha
+      await prisma.message.update({
+        where: { id },
+        data: {
+          status: MessageStatus.FAILED,
+        },
+      })
+
+      res.status(500).json({ 
+        error: 'Erro ao enviar mensagem via WhatsApp',
+        details: whatsappError.message 
+      })
+    }
   } catch (error) {
     res.status(500).json({ error: 'Erro ao enviar mensagem' })
+  }
+}
+
+// Verificar status da conexão com WhatsApp
+export const checkWhatsAppStatus = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const isConnected = await evolutionService.checkConnection()
+    const instanceInfo = isConnected ? await evolutionService.getInstanceInfo() : null
+
+    res.json({
+      connected: isConnected,
+      instance: instanceInfo,
+      configured: !!(process.env.EVOLUTION_API_URL && process.env.EVOLUTION_API_KEY),
+    })
+  } catch (error: any) {
+    res.status(500).json({ 
+      error: 'Erro ao verificar status',
+      details: error.message 
+    })
+  }
+}
+
+// Enviar mensagem de teste
+export const sendTestMessage = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const userId = (req as any).userId
+    const { phone, message } = req.body
+
+    if (!phone || !message) {
+      res.status(400).json({ error: 'Telefone e mensagem são obrigatórios' })
+      return
+    }
+
+    const isConnected = await evolutionService.checkConnection()
+    if (!isConnected) {
+      res.status(503).json({ 
+        error: 'WhatsApp não conectado',
+        setup: 'Configure a Evolution API primeiro'
+      })
+      return
+    }
+
+    await evolutionService.sendTextMessage(phone, message)
+
+    res.json({
+      sent: true,
+      to: phone,
+      message,
+    })
+  } catch (error: any) {
+    res.status(500).json({ 
+      error: 'Erro ao enviar mensagem de teste',
+      details: error.message 
+    })
+  }
+}
+
+// Obter QR Code para conectar WhatsApp
+export const getQRCode = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const qrData = await evolutionService.getQRCode()
+    
+    res.json({
+      qrCode: qrData.qrCode,
+      status: qrData.status,
+      configured: true,
+    })
+  } catch (error: any) {
+    res.status(500).json({ 
+      error: 'Erro ao obter QR Code',
+      details: error.message,
+      configured: !!(process.env.EVOLUTION_API_URL && process.env.EVOLUTION_API_KEY),
+    })
+  }
+}
+
+// Desconectar WhatsApp
+export const disconnectWhatsApp = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    await evolutionService.disconnect()
+    res.json({ message: 'WhatsApp desconectado com sucesso' })
+  } catch (error: any) {
+    res.status(500).json({ 
+      error: 'Erro ao desconectar WhatsApp',
+      details: error.message 
+    })
   }
 }
