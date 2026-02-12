@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  waha:
+    image: devlikeapro/waha:noweb
+    container_name: waha-api
+    ports:
+      - "3003:3000"
+    environment:
+      # Configurações básicas
+      - WAHA_LOG_LEVEL=info
+      - WAHA_LOG_FORMAT=PRETTY
+      
+      # Segurança - API Key
+      - WAHA_API_KEY=${WAHA_API_KEY:-your-secret-key}
+      
+      # Credenciais fixas para Dashboard e Swagger (evita gerar novas a cada restart)
+      - WAHA_DASHBOARD_USERNAME=admin
+      - WAHA_DASHBOARD_PASSWORD=${WAHA_DASHBOARD_PASSWORD:-admin123}
+      - WHATSAPP_SWAGGER_USERNAME=admin
+      - WHATSAPP_SWAGGER_PASSWORD=${WHATSAPP_SWAGGER_PASSWORD:-admin123}
+      
+      # Engine NOWEB (mais leve)
+      - WAHA_ENGINE=NOWEB
+      
+      # Armazenamento - persistir sessão
+      - WAHA_STORE_ENABLED=true
+      - WAHA_STORE_FULL_SYNC=false
+      
+      # Configurações de sessão
+      - WAHA_SESSIONS_DIR=/tmp/waha_sessions
+      
+      # Webhooks (opcional - também configurado via API)
+      - WAHA_WEBHOOK_URL=${WAHA_WEBHOOK_URL:-}
+      - WAHA_WEBHOOK_EVENTS=session.status,message
+      
+      # Auto-start sessions
+      - WAHA_SESSIONS_AUTO_START=true
+      
+      # Permitir healthcheck sem autenticação (importante para o dashboard)
+      - WAHA_HEALTHCHECK_ENABLED=true
+      
+    volumes:
+      # Persistir dados da sessão entre reinicializações
+      - waha_sessions:/tmp/waha_sessions
+      - waha_media:/tmp/waha_media
+      
+    restart: unless-stopped
+    
+    # Garantir que o container tenha acesso à rede do host para webhooks
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "-H", "X-Api-Key: ${WAHA_API_KEY:-your-secret-key}", "http://localhost:3000/api/healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  waha_sessions:
+    driver: local
+  waha_media:
+    driver: local
