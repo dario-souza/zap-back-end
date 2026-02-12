@@ -1,25 +1,42 @@
-import express from 'express';
-import cors from 'cors';
-import authRoutes from './routes/auth.ts';
-import contactRoutes from './routes/contacts.ts';
-import messageRoutes from './routes/messages.ts';
+import express from 'express'
+import path from 'path'
+import { fileURLToPath } from 'url'
+import cors from 'cors'
+import authRoutes from './routes/auth.ts'
+import contactRoutes from './routes/contacts.ts'
+import messageRoutes from './routes/messages.ts'
+import webhookRoutes from './routes/webhooks.ts'
 
-const app = express();
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
-app.use(cors({
-  origin: ['http://localhost:3000', 'http://127.0.0.1:3000'],
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-}));
-app.use(express.json());
+const app = express()
 
-app.use('/api/auth', authRoutes);
-app.use('/api/contacts', contactRoutes);
-app.use('/api/messages', messageRoutes);
+app.use(
+  cors({
+    origin: '*',
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  }),
+)
+app.use(express.json())
+
+// Servir arquivos estáticos da pasta public
+app.use(express.static(path.join(__dirname, '../public')))
+
+app.use('/api/auth', authRoutes)
+app.use('/api/contacts', contactRoutes)
+app.use('/api/messages', messageRoutes)
+app.use('/api/webhooks', webhookRoutes)
 
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
+  res.json({ status: 'ok', timestamp: new Date().toISOString() })
+})
 
-export default app;
+// Rota para página de conexão WhatsApp
+app.get('/whatsapp-connect', (req, res) => {
+  res.sendFile(path.join(__dirname, '../public/whatsapp-connect.html'))
+})
+
+export default app

@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express'
 import { prisma } from '../lib/prisma.ts'
 import { MessageType, MessageStatus } from '@prisma/client'
-import { evolutionService } from '../services/evolution.ts'
+import { wahaService } from '../services/waha.ts'
 
 export const getAllMessages = async (
   req: Request,
@@ -218,11 +218,11 @@ export const sendMessageNow = async (
       return
     }
 
-    // Verifica se Evolution API está configurada
-    const isConnected = await evolutionService.checkConnection()
+    // Verifica se WAHA API está configurada
+    const isConnected = await wahaService.checkConnection()
     if (!isConnected) {
       res.status(503).json({ 
-        error: 'WhatsApp não conectado. Configure a Evolution API primeiro.',
+        error: 'WhatsApp não conectado. Configure a WAHA API primeiro.',
         setup: 'Veja o arquivo WHATSAPP_SETUP.md'
       })
       return
@@ -230,7 +230,7 @@ export const sendMessageNow = async (
 
     // Envia mensagem via WhatsApp
     try {
-      await evolutionService.sendTextMessage(
+      await wahaService.sendTextMessage(
         message.contact.phone,
         message.content
       )
@@ -282,13 +282,13 @@ export const checkWhatsAppStatus = async (
   res: Response,
 ): Promise<void> => {
   try {
-    const isConnected = await evolutionService.checkConnection()
-    const instanceInfo = isConnected ? await evolutionService.getInstanceInfo() : null
+    const isConnected = await wahaService.checkConnection()
+    const sessionInfo = isConnected ? await wahaService.getSessionInfo() : null
 
     res.json({
       connected: isConnected,
-      instance: instanceInfo,
-      configured: !!(process.env.EVOLUTION_API_URL && process.env.EVOLUTION_API_KEY),
+      session: sessionInfo,
+      configured: !!(process.env.WAHA_API_URL && process.env.WAHA_API_KEY),
     })
   } catch (error: any) {
     res.status(500).json({ 
@@ -312,16 +312,16 @@ export const sendTestMessage = async (
       return
     }
 
-    const isConnected = await evolutionService.checkConnection()
+    const isConnected = await wahaService.checkConnection()
     if (!isConnected) {
       res.status(503).json({ 
         error: 'WhatsApp não conectado',
-        setup: 'Configure a Evolution API primeiro'
+        setup: 'Configure a WAHA API primeiro'
       })
       return
     }
 
-    await evolutionService.sendTextMessage(phone, message)
+    await wahaService.sendTextMessage(phone, message)
 
     res.json({
       sent: true,
@@ -342,7 +342,7 @@ export const getQRCode = async (
   res: Response,
 ): Promise<void> => {
   try {
-    const qrData = await evolutionService.getQRCode()
+    const qrData = await wahaService.getQRCode()
     
     res.json({
       qrCode: qrData.qrCode,
@@ -353,7 +353,7 @@ export const getQRCode = async (
     res.status(500).json({ 
       error: 'Erro ao obter QR Code',
       details: error.message,
-      configured: !!(process.env.EVOLUTION_API_URL && process.env.EVOLUTION_API_KEY),
+      configured: !!(process.env.WAHA_API_URL && process.env.WAHA_API_KEY),
     })
   }
 }
@@ -364,7 +364,7 @@ export const disconnectWhatsApp = async (
   res: Response,
 ): Promise<void> => {
   try {
-    await evolutionService.disconnect()
+    await wahaService.disconnect()
     res.json({ message: 'WhatsApp desconectado com sucesso' })
   } catch (error: any) {
     res.status(500).json({ 

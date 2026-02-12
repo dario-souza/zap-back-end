@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZapReminder - Conectar WhatsApp</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            text-align: center;
+            max-width: 400px;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+        }
+        .qr-container {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            border: 2px dashed #ccc;
+        }
+        #qrcode {
+            max-width: 300px;
+            width: 100%;
+        }
+        .instructions {
+            background: #f0f0f0;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
+            text-align: left;
+            font-size: 14px;
+            color: #555;
+        }
+        .instructions ol {
+            margin: 0;
+            padding-left: 20px;
+        }
+        .instructions li {
+            margin: 10px 0;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .status.connecting {
+            background: #fff3cd;
+            color: #856404;
+        }
+        .status.connected {
+            background: #d4edda;
+            color: #155724;
+        }
+        .refresh-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 20px;
+            transition: background 0.3s;
+        }
+        .refresh-btn:hover {
+            background: #5568d3;
+        }
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-left: 10px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📱 ZapReminder</h1>
+        <p class="subtitle">Conecte seu WhatsApp</p>
+        
+        <div class="qr-container">
+            <img id="qrcode" src="" alt="QR Code">
+            <div id="loading" class="loading" style="display: none;"></div>
+        </div>
+        
+        <div id="status" class="status connecting">
+            Aguardando conexão...
+        </div>
+        
+        <div class="instructions">
+            <strong>Como conectar:</strong>
+            <ol>
+                <li>Abra o WhatsApp no seu celular</li>
+                <li>Toque em "Mais opções" (⋮) ou "Configurações"</li>
+                <li>Selecione "Aparelhos conectados"</li>
+                <li>Toque em "Conectar um aparelho"</li>
+                <li>Aponte a câmera para o QR Code acima</li>
+            </ol>
+        </div>
+        
+        <button class="refresh-btn" onclick="refreshQRCode()">
+            🔄 Atualizar QR Code
+        </button>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:3003';
+        const API_KEY = '01c351f5e92b439394e18f2f83107877';
+        let checkInterval;
+
+        async function fetchQRCode() {
+            try {
+                document.getElementById('loading').style.display = 'inline-block';
+                
+                // Primeiro verifica se já está conectado
+                const sessionRes = await fetch(`${API_URL}/api/sessions/default`, {
+                    headers: { 'X-Api-Key': API_KEY }
+                });
+                const session = await sessionRes.json();
+                
+                if (session.status === 'WORKING') {
+                    document.getElementById('status').className = 'status connected';
+                    document.getElementById('status').textContent = '✅ WhatsApp conectado!';
+                    document.getElementById('qrcode').src = '';
+                    document.getElementById('qrcode').alt = 'WhatsApp conectado!';
+                    clearInterval(checkInterval);
+                    return;
+                }
+                
+                // Se não está conectado, pega o QR Code
+                const qrRes = await fetch(`${API_URL}/api/default/auth/qr`, {
+                    headers: { 
+                        'X-Api-Key': API_KEY,
+                        'Accept': 'application/json'
+                    }
+                });
+                
+                if (qrRes.ok) {
+                    const data = await qrRes.json();
+                    if (data.data) {
+                        document.getElementById('qrcode').src = `data:${data.mimetype};base64,${data.data}`;
+                        document.getElementById('status').className = 'status connecting';
+                        document.getElementById('status').textContent = '📲 Escaneie o QR Code com seu WhatsApp';
+                    }
+                }
+            } catch (error) {
+                console.error('Erro:', error);
+                document.getElementById('status').textContent = '❌ Erro ao carregar QR Code';
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+            }
+        }
+
+        function refreshQRCode() {
+            fetchQRCode();
+        }
+
+        function startChecking() {
+            fetchQRCode();
+            // Verifica a cada 3 segundos se conectou
+            checkInterval = setInterval(fetchQRCode, 3000);
+        }
+
+        // Inicia ao carregar a página
+        startChecking();
+    </script>
+</body>
+</html>
