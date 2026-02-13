@@ -28,7 +28,7 @@ services:
       - WAHA_STORE_FULL_SYNC=false
       
       # Configurações de sessão
-      - WAHA_SESSIONS_DIR=/tmp/waha_sessions
+      - WAHA_SESSIONS_DIR=/app/.sessions
       
       # Webhooks (opcional - também configurado via API)
       - WAHA_WEBHOOK_URL=${WAHA_WEBHOOK_URL:-}
@@ -41,9 +41,9 @@ services:
       - WAHA_HEALTHCHECK_ENABLED=true
       
     volumes:
-      # Persistir dados da sessão entre reinicializações
-      - waha_sessions:/tmp/waha_sessions
-      - waha_media:/tmp/waha_media
+      # Persistir dados da sessão entre reinicializações (NOWEB usa /app/.sessions)
+      - waha_sessions:/app/.sessions
+      - waha_media:/app/.media
       
     restart: unless-stopped
     
