@@ -144,6 +144,11 @@
                 const sessionRes = await fetch(`${API_URL}/api/sessions/default`, {
                     headers: { 'X-Api-Key': API_KEY }
                 });
+                
+                if (!sessionRes.ok) {
+                    throw new Error('Erro ao verificar sessão');
+                }
+                
                 const session = await sessionRes.json();
                 
                 if (session.status === 'WORKING') {
@@ -153,6 +158,77 @@
                     document.getElementById('qrcode').alt = 'WhatsApp conectado!';
                     clearInterval(checkInterval);
                     return;
+                }
+                
+                // Se sessão falhou, reinicia
+                if (session.status === 'FAILED') {
+                    document.getElementById('status').textContent = '🔄 Sessão falhou, reiniciando...';
+                    
+                    await fetch(`${API_URL}/api/sessions/default/restart`, {
+                        method: 'POST',
+                        headers: { 'X-Api-Key': API_KEY }
+                    });
+                    
+                    await new Promise(resolve => setTimeout(resolve, 5000));
+                    return; // Próxima iteração vai verificar o novo status
+                }
+                
+                // Se sessão está parada, precisa iniciar primeiro
+                if (session.status === 'STOPPED') {
+                    document.getElementById('status').textContent = '🚀 Iniciando sessão...';
+                    
+                    // Tenta iniciar a sessão
+                    const startRes = await fetch(`${API_URL}/api/sessions/default/start`, {
+                        method: 'POST',
+                        headers: { 'X-Api-Key': API_KEY }
+                    });
+                    
+                    if (!startRes.ok) {
+                        // Se falhou ao iniciar, tenta criar a sessão primeiro
+                        const createRes = await fetch(`${API_URL}/api/sessions`, {
+                            method: 'POST',
+                            headers: { 
+                                'X-Api-Key': API_KEY,
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                name: 'default',
+                                config: {
+                                    noweb: {
+                                        store: {
+                                            enabled: true,
+                                            fullSync: false
+                                        }
+                                    }
+                                }
+                            })
+                        });
+                        
+                        if (createRes.ok || createRes.status === 409) { // 409 = já existe
+                            // Tenta iniciar novamente
+                            await fetch(`${API_URL}/api/sessions/default/start`, {
+                                method: 'POST',
+                                headers: { 'X-Api-Key': API_KEY }
+                            });
+                        }
+                    }
+                    
+                    // Aguarda a sessão iniciar
+                    document.getElementById('status').textContent = '⏳ Aguardando sessão iniciar...';
+                    await new Promise(resolve => setTimeout(resolve, 3000));
+                    
+                    // Verifica status novamente
+                    const checkRes = await fetch(`${API_URL}/api/sessions/default`, {
+                        headers: { 'X-Api-Key': API_KEY }
+                    });
+                    const newSession = await checkRes.json();
+                    
+                    if (newSession.status === 'WORKING') {
+                        document.getElementById('status').className = 'status connected';
+                        document.getElementById('status').textContent = '✅ WhatsApp conectado!';
+                        clearInterval(checkInterval);
+                        return;
+                    }
                 }
                 
                 // Se não está conectado, pega o QR Code
@@ -169,6 +245,14 @@
                         document.getElementById('qrcode').src = `data:${data.mimetype};base64,${data.data}`;
                         document.getElementById('status').className = 'status connecting';
                         document.getElementById('status').textContent = '📲 Escaneie o QR Code com seu WhatsApp';
+                    }
+                } else if (qrRes.status === 422) {
+                    // Sessão ainda não está pronta para QR Code
+                    const errorData = await qrRes.json();
+                    if (errorData.response && errorData.response.status === 'FAILED') {
+                        document.getElementById('status').textContent = '❌ Sessão falhou, tentando reiniciar...';
+                    } else {
+                        document.getElementById('status').textContent = `⏳ ${session.status} - Aguardando...`;
                     }
                 }
             } catch (error) {
