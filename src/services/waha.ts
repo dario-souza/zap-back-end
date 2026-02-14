@@ -79,7 +79,7 @@ export class WAHAService {
     return response.json();
   }
 
-  async sendTextMessage(phone: string, message: string): Promise<any> {
+  async sendTextMessage(phone: string, message: string): Promise<{ id: string; timestamp: number }> {
     if (!this.isConfigured()) {
       throw new Error('WAHA API não configurada. Verifique as variáveis de ambiente.');
     }
@@ -99,10 +99,23 @@ export class WAHAService {
       text: message,
     };
 
-    return this.fetch('/api/sendText', {
+    const response = await this.fetch('/api/sendText', {
       method: 'POST',
       body: JSON.stringify(payload),
     });
+
+    console.log('[WAHA] Resposta bruta do sendText:', JSON.stringify(response, null, 2));
+
+    // Retorna o ID da mensagem para rastreamento de status
+    const messageId = response?.id || response?.key?.id || '';
+    const timestamp = response?.timestamp || Date.now();
+    
+    console.log(`[WAHA] Mensagem enviada - ID: ${messageId}, Timestamp: ${timestamp}`);
+    
+    return {
+      id: messageId,
+      timestamp: timestamp,
+    };
   }
 
   async checkConnection(): Promise<boolean> {
@@ -428,6 +441,30 @@ export class WAHAService {
   // URL do Swagger
   getSwaggerUrl(): string {
     return `${this.baseUrl}/swagger`;
+  }
+
+  // Obter informações de uma mensagem específica pelo ID
+  async getMessageInfo(messageId: string): Promise<any> {
+    if (!this.isConfigured()) {
+      throw new Error('WAHA API não configurada');
+    }
+
+    try {
+      // Tenta obter a mensagem do histórico de chats
+      // Na versão CORE do NOWEB, pode não ter endpoint específico para isso
+      // Vamos tentar buscar nas mensagens recentes
+      const response = await this.fetch(`/api/${this.sessionName}/chats/messages?limit=50`);
+      
+      if (Array.isArray(response)) {
+        const message = response.find((m: any) => m.id === messageId || m.key?.id === messageId);
+        return message || null;
+      }
+      
+      return null;
+    } catch (error: any) {
+      console.log(`[WAHA] Não foi possível obter info da mensagem ${messageId}:`, error.message);
+      return null;
+    }
   }
 }
 

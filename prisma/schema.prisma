@@ -41,6 +41,8 @@ model Contact {
 enum MessageStatus {
   PENDING
   SENT
+  DELIVERED
+  READ
   FAILED
   SCHEDULED
 }
@@ -59,6 +61,9 @@ model Message {
   status      MessageStatus @default(PENDING)
   scheduledAt DateTime?     @map("scheduled_at")
   sentAt      DateTime?     @map("sent_at")
+  deliveredAt DateTime?     @map("delivered_at")
+  readAt      DateTime?     @map("read_at")
+  externalId  String?       @map("external_id")
   createdAt   DateTime      @default(now()) @map("created_at")
   updatedAt   DateTime      @updatedAt @map("updated_at")
   userId      String        @db.ObjectId

@@ -230,17 +230,18 @@ export const sendMessageNow = async (
 
     // Envia mensagem via WhatsApp
     try {
-      await wahaService.sendTextMessage(
+      const sentMessage = await wahaService.sendTextMessage(
         message.contact.phone,
         message.content
       )
 
-      // Atualiza status no banco
+      // Atualiza status no banco com o externalId (ID do WhatsApp)
       const updatedMessage = await prisma.message.update({
         where: { id },
         data: {
           status: MessageStatus.SENT,
           sentAt: new Date(),
+          externalId: sentMessage.id,
         },
         include: {
           contact: {
