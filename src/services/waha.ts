@@ -245,8 +245,12 @@ export class WAHAService {
     }
 
     try {
+      console.log('[WAHA] Iniciando obtenção do QR Code...');
+      
       // Primeiro verifica se já está conectado
       const isConnected = await this.checkConnection();
+      console.log('[WAHA] Conectado?', isConnected);
+      
       if (isConnected) {
         return {
           qrCode: null,
@@ -257,41 +261,60 @@ export class WAHAService {
 
       // Verifica status atual da sessão
       const session = await this.getSessionInfo();
+      console.log('[WAHA] Status da sessão:', session.status);
       
       // Se está parada, cria e inicia
       if (session.status === 'STOPPED') {
+        console.log('[WAHA] Sessão parada, criando...');
         await this.createSession();
-        // Aguarda inicialização
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await new Promise(resolve => setTimeout(resolve, 3000));
       }
 
       // Tenta obter QR Code
       try {
+        const qrUrl = `${this.baseUrl}/api/${this.sessionName}/auth/qr`;
+        console.log('[WAHA] Buscando QR em:', qrUrl);
+        
         // WAHA retorna QR como imagem base64
-        const response = await fetch(`${this.baseUrl}/api/${this.sessionName}/auth/qr`, {
+        const response = await fetch(qrUrl, {
           headers: {
             'X-Api-Key': this.apiKey,
             'Accept': 'application/json',
           },
         });
 
+        console.log('[WAHA] Resposta QR:', response.status);
+
         if (!response.ok) {
+          const errorText = await response.text();
+          console.error('[WAHA] Erro ao obter QR:', response.status, errorText);
+          
           // Se não conseguiu QR, pode estar conectando ou precisa reiniciar
           if (response.status === 404) {
-            // Sessão não existe, criar
+            console.log('[WAHA] Sessão não encontrada, criando...');
             await this.createSession();
             await new Promise(resolve => setTimeout(resolve, 3000));
             return this.getQRCode();
           }
           
-          const errorText = await response.text();
+          if (response.status === 422) {
+            // Sessão ainda não está pronta para QR
+            return {
+              qrCode: null,
+              status: 'STARTING',
+              message: 'Sessão iniciando, aguarde...'
+            };
+          }
+          
           throw new Error(`HTTP ${response.status}: ${errorText}`);
         }
 
         const data = await response.json();
+        console.log('[WAHA] Dados QR recebidos:', data ? 'Sim' : 'Não');
         
         // WAHA retorna base64 diretamente em data.data
         if (data.data) {
+          console.log('[WAHA] QR Code obtido com sucesso!');
           return {
             qrCode: data.data,
             status: 'SCAN_QR_CODE',
@@ -306,10 +329,11 @@ export class WAHAService {
         };
 
       } catch (error: any) {
-        console.error('Erro ao obter QR:', error.message);
+        console.error('[WAHA] Erro ao obter QR:', error.message);
         
         // Se está em SCAN_QR_CODE mas não conseguiu QR, tenta reiniciar
         if (session.status === 'SCAN_QR_CODE') {
+          console.log('[WAHA] Tentando reiniciar sessão...');
           await this.restartSession();
           await new Promise(resolve => setTimeout(resolve, 3000));
           return this.getQRCode();
