@@ -374,3 +374,40 @@ export const disconnectWhatsApp = async (
     })
   }
 }
+
+// Iniciar sessão do WhatsApp
+export const startWhatsAppSession = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    console.log('[WhatsApp] Iniciando sessão...')
+    
+    // Cria a sessão na WAHA
+    const session = await wahaService.createSession()
+    console.log('[WhatsApp] Sessão criada:', session)
+    
+    // Inicia a sessão
+    const started = await wahaService.startSession()
+    console.log('[WhatsApp] Sessão iniciada:', started)
+    
+    // Aguarda um pouco e tenta obter QR Code
+    await new Promise(resolve => setTimeout(resolve, 3000))
+    
+    // Verifica status atual
+    const sessionInfo = await wahaService.getSessionInfo()
+    
+    res.json({
+      success: true,
+      session: sessionInfo,
+      message: 'Sessão iniciada. Aguarde o QR Code se necessário.',
+      dashboardUrl: 'https://waha1.ux.net.br/dashboard'
+    })
+  } catch (error: any) {
+    console.error('[WhatsApp] Erro ao iniciar sessão:', error)
+    res.status(500).json({ 
+      error: 'Erro ao iniciar sessão do WhatsApp',
+      details: error.message 
+    })
+  }
+}
