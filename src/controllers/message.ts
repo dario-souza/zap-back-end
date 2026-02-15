@@ -283,8 +283,23 @@ export const checkWhatsAppStatus = async (
   res: Response,
 ): Promise<void> => {
   try {
-    const isConnected = await wahaService.checkConnection()
-    const sessionInfo = isConnected ? await wahaService.getSessionInfo() : null
+    console.log('[WhatsApp] Verificando status...')
+    
+    // Sempre tenta obter info da sessão, mesmo se não estiver conectado
+    let sessionInfo = null
+    let isConnected = false
+    
+    try {
+      sessionInfo = await wahaService.getSessionInfo()
+      console.log('[WhatsApp] Info da sessão:', sessionInfo)
+      
+      // Verifica se está conectado (WORKING)
+      isConnected = sessionInfo?.status === 'WORKING'
+    } catch (sessionError: any) {
+      console.log('[WhatsApp] Sessão não existe ou erro:', sessionError.message)
+      sessionInfo = null
+      isConnected = false
+    }
 
     res.json({
       connected: isConnected,
@@ -292,6 +307,7 @@ export const checkWhatsAppStatus = async (
       configured: !!(process.env.WAHA_API_URL && process.env.WAHA_API_KEY),
     })
   } catch (error: any) {
+    console.error('[WhatsApp] Erro ao verificar status:', error)
     res.status(500).json({ 
       error: 'Erro ao verificar status',
       details: error.message 
