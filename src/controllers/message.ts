@@ -401,33 +401,62 @@ export const startWhatsAppSession = async (
     console.log('[WhatsApp] Iniciando processo de conexão...')
     console.log('[WhatsApp] ==========================================')
     
-    // Cria a sessão na WAHA
-    console.log('[WhatsApp] Passo 1: Criando sessão...')
-    const session = await wahaService.createSession()
-    console.log('[WhatsApp] Resultado criação:', JSON.stringify(session, null, 2))
+    // Primeiro verifica o status atual
+    console.log('[WhatsApp] Verificando status atual...')
+    const currentSession = await wahaService.getSessionInfo()
+    console.log('[WhatsApp] Status atual:', currentSession.status)
     
-    // Inicia a sessão
-    console.log('[WhatsApp] Passo 2: Iniciando sessão...')
-    const started = await wahaService.startSession()
-    console.log('[WhatsApp] Resultado início:', JSON.stringify(started, null, 2))
+    // Se está em FAILED, precisa reiniciar
+    if (currentSession.status === 'FAILED') {
+      console.log('[WhatsApp] Sessão em FAILED, reiniciando...')
+      await wahaService.restartSession()
+      console.log('[WhatsApp] Sessão reiniciada!')
+    } else if (currentSession.status === 'STOPPED') {
+      // Se está parada, inicia
+      console.log('[WhatsApp] Sessão parada, iniciando...')
+      await wahaService.startSession()
+      console.log('[WhatsApp] Sessão iniciada!')
+    } else if (currentSession.status === 'WORKING') {
+      // Já está conectada
+      console.log('[WhatsApp] Sessão já está conectada!')
+      res.json({
+        success: true,
+        session: currentSession,
+        message: 'WhatsApp já está conectado!',
+        dashboardUrl: 'https://waha1.ux.net.br/dashboard'
+      })
+      return
+    } else {
+      // Qualquer outro status, tenta criar/iniciar
+      console.log('[WhatsApp] Criando/iniciando sessão...')
+      await wahaService.createSession()
+      await wahaService.startSession()
+    }
     
-    // Aguarda um pouco e tenta obter QR Code
-    console.log('[WhatsApp] Passo 3: Aguardando 3 segundos...')
-    await new Promise(resolve => setTimeout(resolve, 3000))
+    // Aguarda um pouco para o status atualizar
+    console.log('[WhatsApp] Aguardando 5 segundos para status atualizar...')
+    await new Promise(resolve => setTimeout(resolve, 5000))
     
-    // Verifica status atual
-    console.log('[WhatsApp] Passo 4: Verificando status final...')
+    // Verifica status final
+    console.log('[WhatsApp] Verificando status final...')
     const sessionInfo = await wahaService.getSessionInfo()
-    console.log('[WhatsApp] Status final:', JSON.stringify(sessionInfo, null, 2))
+    console.log('[WhatsApp] Status final:', sessionInfo.status)
     
     console.log('[WhatsApp] ==========================================')
     console.log('[WhatsApp] Processo concluído!')
     console.log('[WhatsApp] ==========================================')
     
+    let message = 'Sessão iniciada.'
+    if (sessionInfo.status === 'SCAN_QR_CODE') {
+      message = 'QR Code disponível! Escaneie no Dashboard da WAHA.'
+    } else if (sessionInfo.status === 'FAILED') {
+      message = 'Erro ao conectar. Tente reiniciar ou verifique o Dashboard.'
+    }
+    
     res.json({
       success: true,
       session: sessionInfo,
-      message: 'Sessão iniciada. Aguarde o QR Code se necessário.',
+      message: message,
       dashboardUrl: 'https://waha1.ux.net.br/dashboard'
     })
   } catch (error: any) {
