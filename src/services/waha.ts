@@ -442,30 +442,6 @@ export class WAHAService {
   getSwaggerUrl(): string {
     return `${this.baseUrl}/swagger`;
   }
-
-  // Obter informações de uma mensagem específica pelo ID
-  async getMessageInfo(messageId: string): Promise<any> {
-    if (!this.isConfigured()) {
-      throw new Error('WAHA API não configurada');
-    }
-
-    try {
-      // Tenta obter a mensagem do histórico de chats
-      // Na versão CORE do NOWEB, pode não ter endpoint específico para isso
-      // Vamos tentar buscar nas mensagens recentes
-      const response = await this.fetch(`/api/${this.sessionName}/chats/messages?limit=50`);
-      
-      if (Array.isArray(response)) {
-        const message = response.find((m: any) => m.id === messageId || m.key?.id === messageId);
-        return message || null;
-      }
-      
-      return null;
-    } catch (error: any) {
-      console.log(`[WAHA] Não foi possível obter info da mensagem ${messageId}:`, error.message);
-      return null;
-    }
-  }
 }
 
 export const wahaService = new WAHAService();

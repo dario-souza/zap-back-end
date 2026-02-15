@@ -20,12 +20,6 @@ export class CronService {
     // Executa a cada minuto - processa mensagens agendadas
     this.task = cron.schedule('* * * * *', async () => {
       await this.processScheduledMessages();
-      
-      // A cada 5 minutos, verifica status de mensagens (alternativa para webhooks na versão CORE)
-      const now = new Date();
-      if (now.getMinutes() % 5 === 0) {
-        await this.checkMessageStatuses();
-      }
     });
 
     this.isRunning = true;
@@ -159,68 +153,6 @@ export class CronService {
     };
   }
 
-  // NOVO: Verificar status de mensagens enviadas (alternativa para webhooks na versão CORE)
-  async checkMessageStatuses() {
-    try {
-      // Busca mensagens SENT que têm externalId e ainda não foram marcadas como DELIVERED/READ
-      const messagesToCheck = await prisma.message.findMany({
-        where: {
-          status: MessageStatus.SENT,
-          externalId: { not: null },
-          // Só verifica mensagens enviadas nas últimas 24h
-          sentAt: {
-            gte: new Date(Date.now() - 24 * 60 * 60 * 1000)
-          }
-        },
-        take: 10, // Limita a 10 mensagens por verificação
-      });
-
-      if (messagesToCheck.length === 0) {
-        return;
-      }
-
-      console.log(`[Cron] Verificando status de ${messagesToCheck.length} mensagens...`);
-
-      for (const message of messagesToCheck) {
-        try {
-          // Na versão CORE do NOWEB, pode não ter endpoint para consultar status individual
-          // Esta é uma tentativa de obter atualizações
-          const messageInfo = await wahaService.getMessageInfo(message.externalId!);
-          
-          if (messageInfo) {
-            console.log(`[Cron] Info da mensagem ${message.externalId}:`, JSON.stringify(messageInfo, null, 2));
-            
-            // Se a mensagem tem ack=2 ou ack=3, atualiza o status
-            const ack = messageInfo.ack || messageInfo.status;
-            
-            if (ack === 2 || ack === 'DELIVERED') {
-              await prisma.message.update({
-                where: { id: message.id },
-                data: {
-                  status: MessageStatus.DELIVERED,
-                  deliveredAt: new Date(),
-                }
-              });
-              console.log(`[Cron] Mensagem ${message.id} marcada como DELIVERED`);
-            } else if (ack === 3 || ack === 'READ') {
-              await prisma.message.update({
-                where: { id: message.id },
-                data: {
-                  status: MessageStatus.READ,
-                  readAt: new Date(),
-                }
-              });
-              console.log(`[Cron] Mensagem ${message.id} marcada como READ`);
-            }
-          }
-        } catch (error: any) {
-          console.log(`[Cron] Não foi possível verificar mensagem ${message.id}:`, error.message);
-        }
-      }
-    } catch (error: any) {
-      console.error('[Cron] Erro ao verificar status das mensagens:', error.message);
-    }
-  }
 }
 
 // Instância singleton
