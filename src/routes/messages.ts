@@ -10,6 +10,7 @@ import {
   sendTestMessage,
   getQRCode,
   disconnectWhatsApp,
+  startWhatsAppSession,
 } from '../controllers/message.ts';
 import { authMiddleware } from '../middlewares/auth.ts';
 import { cronService } from '../services/cron.ts';
@@ -21,6 +22,7 @@ router.use(authMiddleware);
 router.get('/', getAllMessages);
 router.get('/whatsapp/status', checkWhatsAppStatus);
 router.get('/whatsapp/qrcode', getQRCode);
+router.post('/whatsapp/start', startWhatsAppSession);
 router.post('/whatsapp/disconnect', disconnectWhatsApp);
 
 // Status do cron job
