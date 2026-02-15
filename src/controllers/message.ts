@@ -381,21 +381,32 @@ export const startWhatsAppSession = async (
   res: Response,
 ): Promise<void> => {
   try {
-    console.log('[WhatsApp] Iniciando sessão...')
+    console.log('[WhatsApp] ==========================================')
+    console.log('[WhatsApp] Iniciando processo de conexão...')
+    console.log('[WhatsApp] ==========================================')
     
     // Cria a sessão na WAHA
+    console.log('[WhatsApp] Passo 1: Criando sessão...')
     const session = await wahaService.createSession()
-    console.log('[WhatsApp] Sessão criada:', session)
+    console.log('[WhatsApp] Resultado criação:', JSON.stringify(session, null, 2))
     
     // Inicia a sessão
+    console.log('[WhatsApp] Passo 2: Iniciando sessão...')
     const started = await wahaService.startSession()
-    console.log('[WhatsApp] Sessão iniciada:', started)
+    console.log('[WhatsApp] Resultado início:', JSON.stringify(started, null, 2))
     
     // Aguarda um pouco e tenta obter QR Code
+    console.log('[WhatsApp] Passo 3: Aguardando 3 segundos...')
     await new Promise(resolve => setTimeout(resolve, 3000))
     
     // Verifica status atual
+    console.log('[WhatsApp] Passo 4: Verificando status final...')
     const sessionInfo = await wahaService.getSessionInfo()
+    console.log('[WhatsApp] Status final:', JSON.stringify(sessionInfo, null, 2))
+    
+    console.log('[WhatsApp] ==========================================')
+    console.log('[WhatsApp] Processo concluído!')
+    console.log('[WhatsApp] ==========================================')
     
     res.json({
       success: true,
@@ -404,7 +415,10 @@ export const startWhatsAppSession = async (
       dashboardUrl: 'https://waha1.ux.net.br/dashboard'
     })
   } catch (error: any) {
-    console.error('[WhatsApp] Erro ao iniciar sessão:', error)
+    console.error('[WhatsApp] ==========================================')
+    console.error('[WhatsApp] ERRO:', error.message)
+    console.error('[WhatsApp] Stack:', error.stack)
+    console.error('[WhatsApp] ==========================================')
     res.status(500).json({ 
       error: 'Erro ao iniciar sessão do WhatsApp',
       details: error.message 

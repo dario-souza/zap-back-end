@@ -57,6 +57,9 @@ export class WAHAService {
   private async fetch(endpoint: string, options: RequestInit = {}) {
     const url = `${this.baseUrl}${endpoint}`;
     
+    console.log(`[WAHA] Request: ${options.method || 'GET'} ${url}`);
+    console.log(`[WAHA] Headers: X-Api-Key=${this.apiKey ? '***presente***' : '***AUSENTE***'}`);
+    
     const response = await fetch(url, {
       ...options,
       headers: {
@@ -66,9 +69,12 @@ export class WAHAService {
       },
     });
 
+    console.log(`[WAHA] Response: ${response.status} ${response.statusText}`);
+
     if (!response.ok) {
       const error = await response.text();
-      throw new Error(`WAHA API error: ${error}`);
+      console.error(`[WAHA] Erro ${response.status}:`, error);
+      throw new Error(`WAHA API error (${response.status}): ${error}`);
     }
 
     // Alguns endpoints retornam 204 No Content
@@ -158,6 +164,8 @@ export class WAHAService {
       throw new Error('WAHA API não configurada');
     }
 
+    console.log(`[WAHA] Criando sessão '${this.sessionName}' em ${this.baseUrl}...`);
+
     const config: SessionConfig = {
       name: this.sessionName,
       config: {
@@ -175,6 +183,7 @@ export class WAHAService {
 
     // Adicionar webhook se configurado
     if (this.webhookUrl) {
+      console.log(`[WAHA] Configurando webhook: ${this.webhookUrl}`);
       config.config.webhooks = [
         {
           url: this.webhookUrl,
@@ -183,15 +192,20 @@ export class WAHAService {
       ];
     }
 
+    console.log('[WAHA] Payload:', JSON.stringify(config, null, 2));
+
     try {
-      return await this.fetch('/api/sessions', {
+      const result = await this.fetch('/api/sessions', {
         method: 'POST',
         body: JSON.stringify(config),
       });
+      console.log('[WAHA] Sessão criada com sucesso:', result);
+      return result;
     } catch (error: any) {
+      console.error('[WAHA] Erro ao criar sessão:', error.message);
       // Se já existe, retorna a sessão existente
       if (error.message.includes('409') || error.message.includes('already exists') || error.message.includes('already')) {
-        console.log('Sessão já existe, retornando informações atuais');
+        console.log('[WAHA] Sessão já existe, retornando informações atuais');
         return this.getSessionInfo();
       }
       throw error;
@@ -204,13 +218,19 @@ export class WAHAService {
       throw new Error('WAHA API não configurada');
     }
 
+    console.log(`[WAHA] Iniciando sessão '${this.sessionName}'...`);
+
     try {
-      return await this.fetch(`/api/sessions/${this.sessionName}/start`, {
+      const result = await this.fetch(`/api/sessions/${this.sessionName}/start`, {
         method: 'POST',
       });
+      console.log('[WAHA] Sessão iniciada:', result);
+      return result;
     } catch (error: any) {
+      console.error('[WAHA] Erro ao iniciar sessão:', error.message);
       // Se sessão não existe, cria primeiro
       if (error.message.includes('404') || error.message.includes('not found')) {
+        console.log('[WAHA] Sessão não encontrada, criando...');
         await this.createSession();
         return this.startSession();
       }
