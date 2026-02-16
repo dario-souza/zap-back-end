@@ -1,1 +1,1 @@
-web: npx prisma generate && npx prisma db push && tsx src/server.ts
+web: npx prisma generate && tsx src/server.ts

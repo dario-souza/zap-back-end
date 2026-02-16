@@ -6,7 +6,6 @@
   "type": "module",
   "scripts": {
     "dev": "node --no-warnings --env-file .env --experimental-strip-types --watch src/server.ts",
-    "build": "tsc",
     "start": "tsx src/server.ts",
     "test:db": "node --no-warnings --env-file .env --experimental-strip-types test-db.ts",
     "start:all": "npm run start:waha && sleep 5 && npm run dev",
