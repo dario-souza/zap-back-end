@@ -2,10 +2,12 @@
   "name": "whats-back-end",
   "version": "1.0.0",
   "description": "back-end-api-whats",
-  "main": "index.js",
+  "main": "dist/server.js",
   "type": "module",
   "scripts": {
     "dev": "node --no-warnings --env-file .env --experimental-strip-types --watch src/server.ts",
+    "build": "tsc",
+    "start": "tsx src/server.ts",
     "test:db": "node --no-warnings --env-file .env --experimental-strip-types test-db.ts",
     "start:all": "npm run start:waha && sleep 5 && npm run dev",
     "start:waha": "docker compose -f docker-compose.waha.yml up -d",
@@ -31,6 +33,7 @@
     "dotenv": "^17.2.4",
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.2",
-    "node-cron": "^4.2.1"
+    "node-cron": "^4.2.1",
+    "tsx": "^4.19.2"
   }
 }
