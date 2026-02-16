@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authenticate } from '../middlewares/auth.ts';
+import { authMiddleware } from '../middlewares/auth.ts';
 import {
   getOrCreateUserSession,
   startUserSession,
@@ -17,48 +17,18 @@ const router = Router();
  * @desc    Obtém ou cria a sessão do usuário logado
  * @access  Private
  */
-router.get('/session', authenticate, getOrCreateUserSession);
+router.get('/session', authMiddleware, getOrCreateUserSession);
 
-/**
- * @route   POST /api/whatsapp/session/start
- * @desc    Inicia a sessão do WhatsApp do usuário
- * @access  Private
- */
-router.post('/session/start', authenticate, startUserSession);
+router.post('/session/start', authMiddleware, startUserSession);
 
-/**
- * @route   GET /api/whatsapp/session/qr
- * @desc    Obtém QR Code da sessão do usuário
- * @access  Private
- */
-router.get('/session/qr', authenticate, getUserQRCode);
+router.get('/session/qr', authMiddleware, getUserQRCode);
 
-/**
- * @route   POST /api/whatsapp/session/disconnect
- * @desc    Desconecta a sessão do usuário
- * @access  Private
- */
-router.post('/session/disconnect', authenticate, disconnectUserSession);
+router.post('/session/disconnect', authMiddleware, disconnectUserSession);
 
-/**
- * @route   DELETE /api/whatsapp/session
- * @desc    Deleta a sessão do usuário
- * @access  Private
- */
-router.delete('/session', authenticate, deleteUserSession);
+router.delete('/session', authMiddleware, deleteUserSession);
 
-/**
- * @route   GET /api/whatsapp/session/status
- * @desc    Verifica status da conexão do usuário
- * @access  Private
- */
-router.get('/session/status', authenticate, getUserConnectionStatus);
+router.get('/session/status', authMiddleware, getUserConnectionStatus);
 
-/**
- * @route   GET /api/whatsapp/sessions
- * @desc    Lista todas as sessões (admin apenas)
- * @access  Private/Admin
- */
-router.get('/sessions', authenticate, listAllSessions);
+router.get('/sessions', authMiddleware, listAllSessions);
 
 export default router;
