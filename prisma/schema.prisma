@@ -8,17 +8,18 @@ datasource db {
 }
 
 model User {
-  id        String    @id @default(auto()) @map("_id") @db.ObjectId
-  name      String
-  email     String    @unique
-  phone     String?
-  cpf       String?   @unique
-  address   String?
-  password  String
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
-  contacts  Contact[]
-  messages  Message[]
+  id                String             @id @default(auto()) @map("_id") @db.ObjectId
+  name              String
+  email             String             @unique
+  phone             String?
+  cpf       String?
+  address           String?
+  password          String
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+  contacts          Contact[]
+  messages          Message[]
+  whatsappSessions  WhatsAppSession[]
 
   @@map("users")
 }
@@ -75,4 +76,31 @@ model Message {
   @@index([contactId])
   @@index([status])
   @@map("messages")
+}
+
+enum WhatsAppSessionStatus {
+  STOPPED
+  STARTING
+  SCAN_QR_CODE
+  WORKING
+  FAILED
+}
+
+model WhatsAppSession {
+  id          String                @id @default(auto()) @map("_id") @db.ObjectId
+  sessionId   String                @unique @map("session_id")
+  name        String
+  status      WhatsAppSessionStatus @default(STOPPED)
+  phoneNumber String?               @map("phone_number")
+  profileName String?               @map("profile_name")
+  isDefault   Boolean               @default(false) @map("is_default")
+  webhooksConfigured Boolean        @default(false) @map("webhooks_configured")
+  createdAt   DateTime              @default(now()) @map("created_at")
+  updatedAt   DateTime              @updatedAt @map("updated_at")
+  userId      String                @db.ObjectId
+  user        User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@map("whatsapp_sessions")
 }

@@ -1,6 +1,5 @@
 const WAHA_API_URL = process.env.WAHA_API_URL;
 const WAHA_API_KEY = process.env.WAHA_API_KEY;
-const WAHA_SESSION_NAME = process.env.WAHA_SESSION_NAME || 'default';
 const WAHA_WEBHOOK_URL = process.env.WAHA_WEBHOOK_URL;
 
 interface SendMessagePayload {
@@ -40,13 +39,11 @@ interface SessionConfig {
 export class WAHAService {
   private baseUrl: string;
   private apiKey: string;
-  private sessionName: string;
   private webhookUrl: string | undefined;
 
   constructor() {
     this.baseUrl = WAHA_API_URL || '';
     this.apiKey = WAHA_API_KEY || '';
-    this.sessionName = WAHA_SESSION_NAME;
     this.webhookUrl = WAHA_WEBHOOK_URL;
   }
 
@@ -71,7 +68,6 @@ export class WAHAService {
       throw new Error(`WAHA API error: ${error}`);
     }
 
-    // Alguns endpoints retornam 204 No Content
     if (response.status === 204) {
       return null;
     }
@@ -79,22 +75,20 @@ export class WAHAService {
     return response.json();
   }
 
-  async sendTextMessage(phone: string, message: string): Promise<{ id: string; timestamp: number }> {
+  /**
+   * Envia mensagem de texto usando uma sessão específica
+   */
+  async sendTextMessage(sessionName: string, phone: string, message: string): Promise<{ id: string; timestamp: number }> {
     if (!this.isConfigured()) {
       throw new Error('WAHA API não configurada. Verifique as variáveis de ambiente.');
     }
 
-    // Remove caracteres não numéricos do telefone
     const cleanPhone = phone.replace(/\D/g, '');
-    
-    // Adiciona código do país se não tiver (assume Brasil 55)
     const fullPhone = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`;
-    
-    // Formato WAHA: 5511999999999@c.us
     const chatId = `${fullPhone}@c.us`;
 
     const payload: SendMessagePayload = {
-      session: this.sessionName,
+      session: sessionName,
       chatId: chatId,
       text: message,
     };
@@ -106,11 +100,10 @@ export class WAHAService {
 
     console.log('[WAHA] Resposta bruta do sendText:', JSON.stringify(response, null, 2));
 
-    // Retorna o ID da mensagem para rastreamento de status
     const messageId = response?.id || response?.key?.id || '';
     const timestamp = response?.timestamp || Date.now();
     
-    console.log(`[WAHA] Mensagem enviada - ID: ${messageId}, Timestamp: ${timestamp}`);
+    console.log(`[WAHA] Mensagem enviada - ID: ${messageId}, Timestamp: ${timestamp}, Session: ${sessionName}`);
     
     return {
       id: messageId,
@@ -118,32 +111,36 @@ export class WAHAService {
     };
   }
 
-  async checkConnection(): Promise<boolean> {
+  /**
+   * Verifica se uma sessão específica está conectada
+   */
+  async checkConnection(sessionName: string): Promise<boolean> {
     if (!this.isConfigured()) {
       return false;
     }
 
     try {
-      const session = await this.getSessionInfo();
-      // Status WORKING = conectado
+      const session = await this.getSessionInfo(sessionName);
       return session.status === 'WORKING';
     } catch (error) {
       return false;
     }
   }
 
-  async getSessionInfo(): Promise<any> {
+  /**
+   * Obtém informações de uma sessão específica
+   */
+  async getSessionInfo(sessionName: string): Promise<any> {
     if (!this.isConfigured()) {
       throw new Error('WAHA API não configurada');
     }
 
     try {
-      return await this.fetch(`/api/sessions/${this.sessionName}`);
+      return await this.fetch(`/api/sessions/${sessionName}`);
     } catch (error: any) {
-      // Se sessão não existe, retorna status parado
       if (error.message.includes('404') || error.message.includes('not found')) {
         return {
-          name: this.sessionName,
+          name: sessionName,
           status: 'STOPPED',
           config: {},
         };
@@ -152,14 +149,16 @@ export class WAHAService {
     }
   }
 
-  // Criar sessão na WAHA
-  async createSession(): Promise<any> {
+  /**
+   * Cria uma nova sessão no WAHA
+   */
+  async createSession(sessionName: string): Promise<any> {
     if (!this.isConfigured()) {
       throw new Error('WAHA API não configurada');
     }
 
     const config: SessionConfig = {
-      name: this.sessionName,
+      name: sessionName,
       config: {
         noweb: {
           store: {
@@ -173,7 +172,6 @@ export class WAHAService {
       },
     };
 
-    // Adicionar webhook se configurado
     if (this.webhookUrl) {
       config.config.webhooks = [
         {
@@ -189,86 +187,85 @@ export class WAHAService {
         body: JSON.stringify(config),
       });
     } catch (error: any) {
-      // Se já existe, retorna a sessão existente
       if (error.message.includes('409') || error.message.includes('already exists') || error.message.includes('already')) {
-        console.log('Sessão já existe, retornando informações atuais');
-        return this.getSessionInfo();
+        console.log(`Sessão ${sessionName} já existe, retornando informações atuais`);
+        return this.getSessionInfo(sessionName);
       }
       throw error;
     }
   }
 
-  // Iniciar sessão
-  async startSession(): Promise<any> {
+  /**
+   * Inicia uma sessão específica
+   */
+  async startSession(sessionName: string): Promise<any> {
     if (!this.isConfigured()) {
       throw new Error('WAHA API não configurada');
     }
 
     try {
-      return await this.fetch(`/api/sessions/${this.sessionName}/start`, {
+      return await this.fetch(`/api/sessions/${sessionName}/start`, {
         method: 'POST',
       });
     } catch (error: any) {
-      // Se sessão não existe, cria primeiro
       if (error.message.includes('404') || error.message.includes('not found')) {
-        await this.createSession();
-        return this.startSession();
+        await this.createSession(sessionName);
+        return this.startSession(sessionName);
       }
       throw error;
     }
   }
 
-  // Reiniciar sessão para gerar novo QR Code
-  async restartSession(): Promise<any> {
+  /**
+   * Reinicia uma sessão específica
+   */
+  async restartSession(sessionName: string): Promise<any> {
     if (!this.isConfigured()) {
       throw new Error('WAHA API não configurada');
     }
 
     try {
-      return await this.fetch(`/api/sessions/${this.sessionName}/restart`, {
+      return await this.fetch(`/api/sessions/${sessionName}/restart`, {
         method: 'POST',
       });
     } catch (error: any) {
-      // Se sessão não existe, cria e inicia
       if (error.message.includes('404') || error.message.includes('not found')) {
-        await this.createSession();
-        return this.startSession();
+        await this.createSession(sessionName);
+        return this.startSession(sessionName);
       }
       throw error;
     }
   }
 
-  // Obter QR Code da sessão
-  async getQRCode(): Promise<QRCodeResponse> {
+  /**
+   * Obtém QR Code de uma sessão específica
+   */
+  async getQRCode(sessionName: string): Promise<QRCodeResponse> {
     if (!this.isConfigured()) {
       throw new Error('WAHA API não configurada');
     }
 
     try {
-      // Primeiro verifica se já está conectado
-      const isConnected = await this.checkConnection();
+      const isConnected = await this.checkConnection(sessionName);
       if (isConnected) {
+        const session = await this.getSessionInfo(sessionName);
         return {
           qrCode: null,
           status: 'WORKING',
-          message: 'WhatsApp já está conectado!'
+          message: 'WhatsApp já está conectado!',
+          profile: session.me || null,
         };
       }
 
-      // Verifica status atual da sessão
-      const session = await this.getSessionInfo();
+      const session = await this.getSessionInfo(sessionName);
       
-      // Se está parada, cria e inicia
       if (session.status === 'STOPPED') {
-        await this.createSession();
-        // Aguarda inicialização
+        await this.createSession(sessionName);
         await new Promise(resolve => setTimeout(resolve, 2000));
       }
 
-      // Tenta obter QR Code
       try {
-        // WAHA retorna QR como imagem base64
-        const response = await fetch(`${this.baseUrl}/api/${this.sessionName}/auth/qr`, {
+        const response = await fetch(`${this.baseUrl}/api/${sessionName}/auth/qr`, {
           headers: {
             'X-Api-Key': this.apiKey,
             'Accept': 'application/json',
@@ -276,12 +273,10 @@ export class WAHAService {
         });
 
         if (!response.ok) {
-          // Se não conseguiu QR, pode estar conectando ou precisa reiniciar
           if (response.status === 404) {
-            // Sessão não existe, criar
-            await this.createSession();
+            await this.createSession(sessionName);
             await new Promise(resolve => setTimeout(resolve, 3000));
-            return this.getQRCode();
+            return this.getQRCode(sessionName);
           }
           
           const errorText = await response.text();
@@ -290,7 +285,6 @@ export class WAHAService {
 
         const data = await response.json();
         
-        // WAHA retorna base64 diretamente em data.data
         if (data.data) {
           return {
             qrCode: data.data,
@@ -308,11 +302,10 @@ export class WAHAService {
       } catch (error: any) {
         console.error('Erro ao obter QR:', error.message);
         
-        // Se está em SCAN_QR_CODE mas não conseguiu QR, tenta reiniciar
         if (session.status === 'SCAN_QR_CODE') {
-          await this.restartSession();
+          await this.restartSession(sessionName);
           await new Promise(resolve => setTimeout(resolve, 3000));
-          return this.getQRCode();
+          return this.getQRCode(sessionName);
         }
 
         throw error;
@@ -328,15 +321,17 @@ export class WAHAService {
     }
   }
 
-  // Obter código de pareamento (alternativa ao QR)
-  async getPairingCode(phoneNumber: string): Promise<string | null> {
+  /**
+   * Obtém código de pareamento de uma sessão específica
+   */
+  async getPairingCode(sessionName: string, phoneNumber: string): Promise<string | null> {
     if (!this.isConfigured()) {
       throw new Error('WAHA API não configurada');
     }
 
     try {
       const cleanPhone = phoneNumber.replace(/\D/g, '');
-      const response = await fetch(`${this.baseUrl}/api/${this.sessionName}/auth/request-code`, {
+      const response = await fetch(`${this.baseUrl}/api/${sessionName}/auth/request-code`, {
         method: 'POST',
         headers: {
           'X-Api-Key': this.apiKey,
@@ -359,18 +354,19 @@ export class WAHAService {
     }
   }
 
-  // Desconectar sessão (logout)
-  async disconnect(): Promise<any> {
+  /**
+   * Desconecta uma sessão específica
+   */
+  async disconnect(sessionName: string): Promise<any> {
     if (!this.isConfigured()) {
       throw new Error('WAHA API não configurada');
     }
 
     try {
-      return await this.fetch(`/api/sessions/${this.sessionName}/logout`, {
+      return await this.fetch(`/api/sessions/${sessionName}/logout`, {
         method: 'POST',
       });
     } catch (error: any) {
-      // Se sessão não existe, considera como desconectado
       if (error.message.includes('404') || error.message.includes('not found')) {
         return { message: 'Sessão já estava desconectada' };
       }
@@ -378,8 +374,10 @@ export class WAHAService {
     }
   }
 
-  // Verificar estado da conexão em detalhes
-  async getConnectionState(): Promise<{
+  /**
+   * Obtém estado de conexão detalhado de uma sessão
+   */
+  async getConnectionState(sessionName: string): Promise<{
     connected: boolean;
     state: string;
     sessionName: string;
@@ -390,13 +388,13 @@ export class WAHAService {
     }
 
     try {
-      const session = await this.getSessionInfo();
+      const session = await this.getSessionInfo(sessionName);
       const status = session.status || 'STOPPED';
       
       return {
         connected: status === 'WORKING',
         state: status,
-        sessionName: session.name || this.sessionName,
+        sessionName: session.name || sessionName,
         profile: session.me || null,
       };
     } catch (error) {
@@ -405,8 +403,10 @@ export class WAHAService {
     }
   }
 
-  // Listar todas as sessões
-  async listSessions(): Promise<any[]> {
+  /**
+   * Lista todas as sessões do WAHA
+   */
+  async listAllSessions(): Promise<any[]> {
     if (!this.isConfigured()) {
       throw new Error('WAHA API não configurada');
     }
@@ -414,18 +414,19 @@ export class WAHAService {
     return this.fetch('/api/sessions?all=true');
   }
 
-  // Deletar sessão
-  async deleteSession(): Promise<any> {
+  /**
+   * Deleta uma sessão específica
+   */
+  async deleteSession(sessionName: string): Promise<any> {
     if (!this.isConfigured()) {
       throw new Error('WAHA API não configurada');
     }
 
     try {
-      return await this.fetch(`/api/sessions/${this.sessionName}`, {
+      return await this.fetch(`/api/sessions/${sessionName}`, {
         method: 'DELETE',
       });
     } catch (error: any) {
-      // Se sessão não existe, considera como deletada
       if (error.message.includes('404') || error.message.includes('not found')) {
         return { message: 'Sessão já estava removida' };
       }
@@ -433,12 +434,37 @@ export class WAHAService {
     }
   }
 
-  // URL do Dashboard WAHA
+  /**
+   * Para uma sessão específica (stop)
+   */
+  async stopSession(sessionName: string): Promise<any> {
+    if (!this.isConfigured()) {
+      throw new Error('WAHA API não configurada');
+    }
+
+    try {
+      return await this.fetch(`/api/sessions/${sessionName}/stop`, {
+        method: 'POST',
+      });
+    } catch (error: any) {
+      if (error.message.includes('404') || error.message.includes('not found')) {
+        return { message: 'Sessão não encontrada' };
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Gera um nome único de sessão baseado no ID do usuário
+   */
+  generateSessionName(userId: string): string {
+    return `user_${userId}`;
+  }
+
   getDashboardUrl(): string {
     return `${this.baseUrl}/dashboard`;
   }
 
-  // URL do Swagger
   getSwaggerUrl(): string {
     return `${this.baseUrl}/swagger`;
   }
