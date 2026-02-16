@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authenticate } from '../middleware/auth.ts';
+import { authenticate } from '../middlewares/auth.ts';
 import {
   getOrCreateUserSession,
   startUserSession,
