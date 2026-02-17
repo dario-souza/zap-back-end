@@ -54,6 +54,9 @@ export class WAHAService {
   private async fetch(endpoint: string, options: RequestInit = {}) {
     const url = `${this.baseUrl}${endpoint}`;
     
+    console.log(`[WAHA] Request: ${options.method || 'GET'} ${url}`);
+    console.log(`[WAHA] Headers: X-Api-Key=${this.apiKey ? '***presente***' : '***AUSENTE***'}`);
+    
     const response = await fetch(url, {
       ...options,
       headers: {
@@ -63,9 +66,12 @@ export class WAHAService {
       },
     });
 
+    console.log(`[WAHA] Response: ${response.status} ${response.statusText}`);
+
     if (!response.ok) {
       const error = await response.text();
-      throw new Error(`WAHA API error: ${error}`);
+      console.error(`[WAHA] Erro ${response.status}:`, error);
+      throw new Error(`WAHA API error (${response.status}): ${error}`);
     }
 
     if (response.status === 204) {
@@ -157,6 +163,8 @@ export class WAHAService {
       throw new Error('WAHA API não configurada');
     }
 
+    console.log(`[WAHA] Criando sessão '${this.sessionName}' em ${this.baseUrl}...`);
+
     const config: SessionConfig = {
       name: sessionName,
       config: {
@@ -173,6 +181,7 @@ export class WAHAService {
     };
 
     if (this.webhookUrl) {
+      console.log(`[WAHA] Configurando webhook: ${this.webhookUrl}`);
       config.config.webhooks = [
         {
           url: this.webhookUrl,
@@ -181,15 +190,21 @@ export class WAHAService {
       ];
     }
 
+    console.log('[WAHA] Payload:', JSON.stringify(config, null, 2));
+
     try {
-      return await this.fetch('/api/sessions', {
+      const result = await this.fetch('/api/sessions', {
         method: 'POST',
         body: JSON.stringify(config),
       });
+      console.log('[WAHA] Sessão criada com sucesso:', result);
+      return result;
     } catch (error: any) {
+      console.error('[WAHA] Erro ao criar sessão:', error.message);
+      // Se já existe, retorna a sessão existente
       if (error.message.includes('409') || error.message.includes('already exists') || error.message.includes('already')) {
-        console.log(`Sessão ${sessionName} já existe, retornando informações atuais`);
-        return this.getSessionInfo(sessionName);
+        console.log('[WAHA] Sessão já existe, retornando informações atuais');
+        return this.getSessionInfo();
       }
       throw error;
     }
@@ -203,14 +218,21 @@ export class WAHAService {
       throw new Error('WAHA API não configurada');
     }
 
+    console.log(`[WAHA] Iniciando sessão '${this.sessionName}'...`);
+
     try {
-      return await this.fetch(`/api/sessions/${sessionName}/start`, {
+      const result = await this.fetch(`/api/sessions/${this.sessionName}/start`, {
         method: 'POST',
       });
+      console.log('[WAHA] Sessão iniciada:', result);
+      return result;
     } catch (error: any) {
+      console.error('[WAHA] Erro ao iniciar sessão:', error.message);
+      // Se sessão não existe, cria primeiro
       if (error.message.includes('404') || error.message.includes('not found')) {
-        await this.createSession(sessionName);
-        return this.startSession(sessionName);
+        console.log('[WAHA] Sessão não encontrada, criando...');
+        await this.createSession();
+        return this.startSession();
       }
       throw error;
     }
@@ -246,7 +268,12 @@ export class WAHAService {
     }
 
     try {
-      const isConnected = await this.checkConnection(sessionName);
+      console.log('[WAHA] Iniciando obtenção do QR Code...');
+      
+      // Primeiro verifica se já está conectado
+      const isConnected = await this.checkConnection();
+      console.log('[WAHA] Conectado?', isConnected);
+      
       if (isConnected) {
         const session = await this.getSessionInfo(sessionName);
         return {
@@ -257,35 +284,59 @@ export class WAHAService {
         };
       }
 
-      const session = await this.getSessionInfo(sessionName);
+      // Verifica status atual da sessão
+      const session = await this.getSessionInfo();
+      console.log('[WAHA] Status da sessão:', session.status);
       
       if (session.status === 'STOPPED') {
-        await this.createSession(sessionName);
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        console.log('[WAHA] Sessão parada, criando...');
+        await this.createSession();
+        await new Promise(resolve => setTimeout(resolve, 3000));
       }
 
       try {
-        const response = await fetch(`${this.baseUrl}/api/${sessionName}/auth/qr`, {
+        const qrUrl = `${this.baseUrl}/api/${this.sessionName}/auth/qr`;
+        console.log('[WAHA] Buscando QR em:', qrUrl);
+        
+        // WAHA retorna QR como imagem base64
+        const response = await fetch(qrUrl, {
           headers: {
             'X-Api-Key': this.apiKey,
             'Accept': 'application/json',
           },
         });
 
+        console.log('[WAHA] Resposta QR:', response.status);
+
         if (!response.ok) {
+          const errorText = await response.text();
+          console.error('[WAHA] Erro ao obter QR:', response.status, errorText);
+          
+          // Se não conseguiu QR, pode estar conectando ou precisa reiniciar
           if (response.status === 404) {
-            await this.createSession(sessionName);
+            console.log('[WAHA] Sessão não encontrada, criando...');
+            await this.createSession();
             await new Promise(resolve => setTimeout(resolve, 3000));
             return this.getQRCode(sessionName);
           }
           
-          const errorText = await response.text();
+          if (response.status === 422) {
+            // Sessão ainda não está pronta para QR
+            return {
+              qrCode: null,
+              status: 'STARTING',
+              message: 'Sessão iniciando, aguarde...'
+            };
+          }
+          
           throw new Error(`HTTP ${response.status}: ${errorText}`);
         }
 
         const data = await response.json();
+        console.log('[WAHA] Dados QR recebidos:', data ? 'Sim' : 'Não');
         
         if (data.data) {
+          console.log('[WAHA] QR Code obtido com sucesso!');
           return {
             qrCode: data.data,
             status: 'SCAN_QR_CODE',
@@ -300,10 +351,11 @@ export class WAHAService {
         };
 
       } catch (error: any) {
-        console.error('Erro ao obter QR:', error.message);
+        console.error('[WAHA] Erro ao obter QR:', error.message);
         
         if (session.status === 'SCAN_QR_CODE') {
-          await this.restartSession(sessionName);
+          console.log('[WAHA] Tentando reiniciar sessão...');
+          await this.restartSession();
           await new Promise(resolve => setTimeout(resolve, 3000));
           return this.getQRCode(sessionName);
         }

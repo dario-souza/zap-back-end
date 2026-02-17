@@ -286,11 +286,23 @@ export const checkWhatsAppStatus = async (
   res: Response,
 ): Promise<void> => {
   try {
-    const userId = (req as any).userId
-    const sessionName = wahaService.generateSessionName(userId);
+    console.log('[WhatsApp] Verificando status...')
     
-    const isConnected = await wahaService.checkConnection(sessionName)
-    const sessionInfo = isConnected ? await wahaService.getSessionInfo(sessionName) : null
+    // Sempre tenta obter info da sessão, mesmo se não estiver conectado
+    let sessionInfo = null
+    let isConnected = false
+    
+    try {
+      sessionInfo = await wahaService.getSessionInfo()
+      console.log('[WhatsApp] Info da sessão:', sessionInfo)
+      
+      // Verifica se está conectado (WORKING)
+      isConnected = sessionInfo?.status === 'WORKING'
+    } catch (sessionError: any) {
+      console.log('[WhatsApp] Sessão não existe ou erro:', sessionError.message)
+      sessionInfo = null
+      isConnected = false
+    }
 
     res.json({
       connected: isConnected,
@@ -298,6 +310,7 @@ export const checkWhatsAppStatus = async (
       configured: !!(process.env.WAHA_API_URL && process.env.WAHA_API_KEY),
     })
   } catch (error: any) {
+    console.error('[WhatsApp] Erro ao verificar status:', error)
     res.status(500).json({ 
       error: 'Erro ao verificar status',
       details: error.message 
@@ -389,101 +402,60 @@ export const disconnectWhatsApp = async (
   }
 }
 
-// Iniciar sessão do WhatsApp do usuário
+// Iniciar sessão do WhatsApp
 export const startWhatsAppSession = async (
   req: Request,
   res: Response,
 ): Promise<void> => {
   try {
-    const userId = (req as any).userId
-    const sessionName = wahaService.generateSessionName(userId);
-    
-    console.log(`[WhatsApp User ${userId}] ==========================================`)
-    console.log(`[WhatsApp User ${userId}] Iniciando processo de conexão...`)
-    console.log(`[WhatsApp User ${userId}] ==========================================`)
-    
-    // Busca ou cria sessão no banco
-    let session = await prisma.whatsAppSession.findFirst({
-      where: { userId },
-    });
-
-    if (!session) {
-      session = await prisma.whatsAppSession.create({
-        data: {
-          sessionId: sessionName,
-          name: sessionName,
-          userId,
-          isDefault: true,
-        },
-      });
-    }
+    console.log('[WhatsApp] ==========================================')
+    console.log('[WhatsApp] Iniciando processo de conexão...')
+    console.log('[WhatsApp] ==========================================')
     
     // Primeiro verifica o status atual
-    console.log(`[WhatsApp User ${userId}] Verificando status atual...`)
-    const currentSession = await wahaService.getSessionInfo(sessionName)
-    console.log(`[WhatsApp User ${userId}] Status atual:`, currentSession.status)
+    console.log('[WhatsApp] Verificando status atual...')
+    const currentSession = await wahaService.getSessionInfo()
+    console.log('[WhatsApp] Status atual:', currentSession.status)
     
-    // Se está em FAILED, deleta e recria completamente
+    // Se está em FAILED, precisa reiniciar
     if (currentSession.status === 'FAILED') {
-      console.log(`[WhatsApp User ${userId}] Sessão em FAILED, deletando e recriando...`)
-      try {
-        await wahaService.disconnect(sessionName)
-        console.log(`[WhatsApp User ${userId}] Sessão parada!`)
-        await new Promise(resolve => setTimeout(resolve, 2000))
-        
-        await wahaService.deleteSession(sessionName)
-        console.log(`[WhatsApp User ${userId}] Sessão deletada!`)
-        await new Promise(resolve => setTimeout(resolve, 2000))
-      } catch (deleteError) {
-        console.log(`[WhatsApp User ${userId}] Erro ao deletar (ignorando):`, deleteError)
-      }
-      
-      console.log(`[WhatsApp User ${userId}] Criando nova sessão...`)
-      await wahaService.createSession(sessionName)
-      console.log(`[WhatsApp User ${userId}] Nova sessão criada!`)
-      
-      console.log(`[WhatsApp User ${userId}] Iniciando nova sessão...`)
-      await wahaService.startSession(sessionName)
-      console.log(`[WhatsApp User ${userId}] Sessão iniciada!`)
+      console.log('[WhatsApp] Sessão em FAILED, reiniciando...')
+      await wahaService.restartSession()
+      console.log('[WhatsApp] Sessão reiniciada!')
     } else if (currentSession.status === 'STOPPED') {
-      console.log(`[WhatsApp User ${userId}] Sessão parada, iniciando...`)
-      await wahaService.startSession(sessionName)
-      console.log(`[WhatsApp User ${userId}] Sessão iniciada!`)
+      // Se está parada, inicia
+      console.log('[WhatsApp] Sessão parada, iniciando...')
+      await wahaService.startSession()
+      console.log('[WhatsApp] Sessão iniciada!')
     } else if (currentSession.status === 'WORKING') {
-      console.log(`[WhatsApp User ${userId}] Sessão já está conectada!`)
+      // Já está conectada
+      console.log('[WhatsApp] Sessão já está conectada!')
       res.json({
         success: true,
         session: currentSession,
         message: 'WhatsApp já está conectado!',
-        dashboardUrl: process.env.WAHA_API_URL
+        dashboardUrl: 'https://waha1.ux.net.br/dashboard'
       })
       return
     } else {
-      console.log(`[WhatsApp User ${userId}] Criando/iniciando sessão...`)
-      await wahaService.createSession(sessionName)
-      await wahaService.startSession(sessionName)
+      // Qualquer outro status, tenta criar/iniciar
+      console.log('[WhatsApp] Criando/iniciando sessão...')
+      await wahaService.createSession()
+      await wahaService.startSession()
     }
     
-    console.log(`[WhatsApp User ${userId}] Aguardando 5 segundos para status atualizar...`)
+    // Aguarda um pouco para o status atualizar
+    console.log('[WhatsApp] Aguardando 5 segundos para status atualizar...')
     await new Promise(resolve => setTimeout(resolve, 5000))
     
-    console.log(`[WhatsApp User ${userId}] Verificando status final...`)
-    const sessionInfo = await wahaService.getSessionInfo(sessionName)
-    console.log(`[WhatsApp User ${userId}] Status final:`, sessionInfo.status)
+    // Verifica status final
+    console.log('[WhatsApp] Verificando status final...')
+    const sessionInfo = await wahaService.getSessionInfo()
+    console.log('[WhatsApp] Status final:', sessionInfo.status)
     
-    console.log(`[WhatsApp User ${userId}] ==========================================`)
-    console.log(`[WhatsApp User ${userId}] Processo concluído!`)
-    console.log(`[WhatsApp User ${userId}] ==========================================`)
-    
-    // Atualiza banco
-    await prisma.whatsAppSession.update({
-      where: { id: session.id },
-      data: {
-        status: sessionInfo.status || 'STARTING',
-        phoneNumber: sessionInfo.me?.id?.replace('@c.us', '').replace('@lid', '') || null,
-        profileName: sessionInfo.me?.pushName || null,
-      },
-    });
+    console.log('[WhatsApp] ==========================================')
+    console.log('[WhatsApp] Processo concluído!')
+    console.log('[WhatsApp] ==========================================')
     
     let message = 'Sessão iniciada.'
     if (sessionInfo.status === 'SCAN_QR_CODE') {
@@ -496,13 +468,13 @@ export const startWhatsAppSession = async (
       success: true,
       session: sessionInfo,
       message: message,
-      dashboardUrl: process.env.WAHA_API_URL
+      dashboardUrl: 'https://waha1.ux.net.br/dashboard'
     })
   } catch (error: any) {
-    console.error(`[WhatsApp] ==========================================`)
-    console.error(`[WhatsApp] ERRO:`, error.message)
-    console.error(`[WhatsApp] Stack:`, error.stack)
-    console.error(`[WhatsApp] ==========================================`)
+    console.error('[WhatsApp] ==========================================')
+    console.error('[WhatsApp] ERRO:', error.message)
+    console.error('[WhatsApp] Stack:', error.stack)
+    console.error('[WhatsApp] ==========================================')
     res.status(500).json({ 
       error: 'Erro ao iniciar sessão do WhatsApp',
       details: error.message 
