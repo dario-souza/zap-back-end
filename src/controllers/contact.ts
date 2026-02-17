@@ -1,12 +1,13 @@
-import type { Request, Response } from 'express'
+import type { Response } from 'express'
 import { prisma } from '../lib/prisma.ts'
+import type { AuthRequest } from '../middlewares/auth.ts'
 
 export const getAllContacts = async (
-  req: Request,
+  req: AuthRequest,
   res: Response,
 ): Promise<void> => {
   try {
-    const userId = (req as any).userId
+    const userId = req.user?.id
 
     const contacts = await prisma.contact.findMany({
       where: { userId },
@@ -20,11 +21,11 @@ export const getAllContacts = async (
 }
 
 export const getContactById = async (
-  req: Request,
+  req: AuthRequest,
   res: Response,
 ): Promise<void> => {
   try {
-    const userId = (req as any).userId
+    const userId = req.user?.id
     const { id } = req.params
 
     const contact = await prisma.contact.findFirst({
@@ -49,11 +50,11 @@ export const getContactById = async (
 }
 
 export const createContact = async (
-  req: Request,
+  req: AuthRequest,
   res: Response,
 ): Promise<void> => {
   try {
-    const userId = (req as any).userId
+    const userId = req.user?.id
     const { name, phone, email } = req.body
 
     const existingContact = await prisma.contact.findFirst({
@@ -81,11 +82,11 @@ export const createContact = async (
 }
 
 export const updateContact = async (
-  req: Request,
+  req: AuthRequest,
   res: Response,
 ): Promise<void> => {
   try {
-    const userId = (req as any).userId
+    const userId = req.user?.id
     const { id } = req.params
     const { name, phone, email } = req.body
 
@@ -114,11 +115,11 @@ export const updateContact = async (
 }
 
 export const deleteContact = async (
-  req: Request,
+  req: AuthRequest,
   res: Response,
 ): Promise<void> => {
   try {
-    const userId = (req as any).userId
+    const userId = req.user?.id
     const { id } = req.params
 
     const existingContact = await prisma.contact.findFirst({

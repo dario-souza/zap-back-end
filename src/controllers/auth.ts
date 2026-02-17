@@ -1,7 +1,8 @@
-import { type Request, type Response } from 'express'
+import { type Response } from 'express'
 import bcrypt from 'bcrypt'
 import jwt from 'jsonwebtoken'
 import { prisma } from '../lib/prisma.ts'
+import type { AuthRequest } from '../middlewares/auth.ts'
 
 export const register = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -94,9 +95,9 @@ export const logout = async (req: Request, res: Response): Promise<void> => {
   res.json({ message: 'Logout realizado com sucesso' })
 }
 
-export const me = async (req: Request, res: Response): Promise<void> => {
+export const me = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const userId = (req as any).userId
+    const userId = req.user?.id
 
     const user = await prisma.user.findUnique({
       where: { id: userId },

@@ -1,6 +1,7 @@
-import type { Request, Response } from 'express'
+import type { Response } from 'express'
 import { PrismaClient } from '@prisma/client'
 import { wahaService } from '../services/waha.ts'
+import type { AuthRequest } from '../middlewares/auth.ts'
 
 const prisma = new PrismaClient()
 
@@ -8,7 +9,7 @@ const prisma = new PrismaClient()
  * Obtém ou cria a sessão do WhatsApp do usuário logado
  */
 export const getOrCreateUserSession = async (
-  req: Request,
+  req: AuthRequest,
   res: Response,
 ): Promise<void> => {
   try {
@@ -80,7 +81,7 @@ export const getOrCreateUserSession = async (
  * Inicia a sessão do WhatsApp do usuário logado
  */
 export const startUserSession = async (
-  req: Request,
+  req: AuthRequest,
   res: Response,
 ): Promise<void> => {
   try {
@@ -194,7 +195,7 @@ export const startUserSession = async (
  * Obtém QR Code da sessão do usuário logado
  */
 export const getUserQRCode = async (
-  req: Request,
+  req: AuthRequest,
   res: Response,
 ): Promise<void> => {
   try {
@@ -257,7 +258,7 @@ export const getUserQRCode = async (
  * Desconecta a sessão do WhatsApp do usuário logado
  */
 export const disconnectUserSession = async (
-  req: Request,
+  req: AuthRequest,
   res: Response,
 ): Promise<void> => {
   try {
@@ -303,7 +304,7 @@ export const disconnectUserSession = async (
  * Deleta a sessão do WhatsApp do usuário logado
  */
 export const deleteUserSession = async (
-  req: Request,
+  req: AuthRequest,
   res: Response,
 ): Promise<void> => {
   try {
@@ -340,7 +341,7 @@ export const deleteUserSession = async (
  * Obtém status da conexão do usuário logado
  */
 export const getUserConnectionStatus = async (
-  req: Request,
+  req: AuthRequest,
   res: Response,
 ): Promise<void> => {
   try {
@@ -376,7 +377,7 @@ export const getUserConnectionStatus = async (
  * Lista todas as sessões do WAHA (apenas admin)
  */
 export const listAllSessions = async (
-  req: Request,
+  req: AuthRequest,
   res: Response,
 ): Promise<void> => {
   try {

@@ -1,14 +1,15 @@
-import type { Request, Response } from 'express'
+import type { Response } from 'express'
 import { prisma } from '../lib/prisma.ts'
 import { MessageType, MessageStatus } from '@prisma/client'
 import { wahaService } from '../services/waha.ts'
+import type { AuthRequest } from '../middlewares/auth.ts'
 
 export const getAllMessages = async (
-  req: Request,
+  req: AuthRequest,
   res: Response,
 ): Promise<void> => {
   try {
-    const userId = (req as any).userId
+    const userId = req.user?.id
     const { status, contactId } = req.query
 
     const where: any = { userId }
@@ -41,11 +42,11 @@ export const getAllMessages = async (
 }
 
 export const getMessageById = async (
-  req: Request,
+  req: AuthRequest,
   res: Response,
 ): Promise<void> => {
   try {
-    const userId = (req as any).userId
+    const userId = req.user?.id
     const { id } = req.params
 
     const message = await prisma.message.findFirst({
@@ -72,11 +73,11 @@ export const getMessageById = async (
 }
 
 export const createMessage = async (
-  req: Request,
+  req: AuthRequest,
   res: Response,
 ): Promise<void> => {
   try {
-    const userId = (req as any).userId
+    const userId = req.user?.id
     const { content, contactId, type = 'TEXT', scheduledAt } = req.body
 
     const contact = await prisma.contact.findFirst({
@@ -118,11 +119,11 @@ export const createMessage = async (
 }
 
 export const updateMessage = async (
-  req: Request,
+  req: AuthRequest,
   res: Response,
 ): Promise<void> => {
   try {
-    const userId = (req as any).userId
+    const userId = req.user?.id
     const { id } = req.params
     const { content, scheduledAt } = req.body
 
@@ -167,11 +168,11 @@ export const updateMessage = async (
 }
 
 export const deleteMessage = async (
-  req: Request,
+  req: AuthRequest,
   res: Response,
 ): Promise<void> => {
   try {
-    const userId = (req as any).userId
+    const userId = req.user?.id
     const { id } = req.params
 
     const existingMessage = await prisma.message.findFirst({
@@ -194,11 +195,11 @@ export const deleteMessage = async (
 }
 
 export const sendMessageNow = async (
-  req: Request,
+  req: AuthRequest,
   res: Response,
 ): Promise<void> => {
   try {
-    const userId = (req as any).userId
+    const userId = req.user?.id
     const { id } = req.params
 
     const message = await prisma.message.findFirst({
@@ -282,7 +283,7 @@ export const sendMessageNow = async (
 
 // Verificar status da conexão com WhatsApp do usuário
 export const checkWhatsAppStatus = async (
-  req: Request,
+  req: AuthRequest,
   res: Response,
 ): Promise<void> => {
   try {
@@ -320,11 +321,11 @@ export const checkWhatsAppStatus = async (
 
 // Enviar mensagem de teste
 export const sendTestMessage = async (
-  req: Request,
+  req: AuthRequest,
   res: Response,
 ): Promise<void> => {
   try {
-    const userId = (req as any).userId
+    const userId = req.user?.id
     const { phone, message } = req.body
 
     if (!phone || !message) {
@@ -360,11 +361,11 @@ export const sendTestMessage = async (
 
 // Obter QR Code para conectar WhatsApp do usuário
 export const getQRCode = async (
-  req: Request,
+  req: AuthRequest,
   res: Response,
 ): Promise<void> => {
   try {
-    const userId = (req as any).userId
+    const userId = req.user?.id
     const sessionName = wahaService.generateSessionName(userId);
     
     const qrData = await wahaService.getQRCode(sessionName)
@@ -385,11 +386,11 @@ export const getQRCode = async (
 
 // Desconectar WhatsApp do usuário
 export const disconnectWhatsApp = async (
-  req: Request,
+  req: AuthRequest,
   res: Response,
 ): Promise<void> => {
   try {
-    const userId = (req as any).userId
+    const userId = req.user?.id
     const sessionName = wahaService.generateSessionName(userId);
     
     await wahaService.disconnect(sessionName)
@@ -404,7 +405,7 @@ export const disconnectWhatsApp = async (
 
 // Iniciar sessão do WhatsApp
 export const startWhatsAppSession = async (
-  req: Request,
+  req: AuthRequest,
   res: Response,
 ): Promise<void> => {
   try {
