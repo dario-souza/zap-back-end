@@ -287,14 +287,24 @@ export const checkWhatsAppStatus = async (
   res: Response,
 ): Promise<void> => {
   try {
+    const userId = req.user?.id
+    
+    if (!userId) {
+      res.status(401).json({ error: 'Usuário não autenticado' })
+      return
+    }
+    
+    const sessionName = wahaService.generateSessionName(userId)
+    
     console.log('[WhatsApp] Verificando status...')
+    console.log('[WhatsApp] Session:', sessionName)
     
     // Sempre tenta obter info da sessão, mesmo se não estiver conectado
     let sessionInfo = null
     let isConnected = false
     
     try {
-      sessionInfo = await wahaService.getSessionInfo()
+      sessionInfo = await wahaService.getSessionInfo(sessionName)
       console.log('[WhatsApp] Info da sessão:', sessionInfo)
       
       // Verifica se está conectado (WORKING)
@@ -409,24 +419,34 @@ export const startWhatsAppSession = async (
   res: Response,
 ): Promise<void> => {
   try {
+    const userId = req.user?.id
+    
+    if (!userId) {
+      res.status(401).json({ error: 'Usuário não autenticado' })
+      return
+    }
+    
+    const sessionName = wahaService.generateSessionName(userId)
+    
     console.log('[WhatsApp] ==========================================')
     console.log('[WhatsApp] Iniciando processo de conexão...')
+    console.log('[WhatsApp] Session:', sessionName)
     console.log('[WhatsApp] ==========================================')
     
     // Primeiro verifica o status atual
     console.log('[WhatsApp] Verificando status atual...')
-    const currentSession = await wahaService.getSessionInfo()
+    const currentSession = await wahaService.getSessionInfo(sessionName)
     console.log('[WhatsApp] Status atual:', currentSession.status)
     
     // Se está em FAILED, precisa reiniciar
     if (currentSession.status === 'FAILED') {
       console.log('[WhatsApp] Sessão em FAILED, reiniciando...')
-      await wahaService.restartSession()
+      await wahaService.restartSession(sessionName)
       console.log('[WhatsApp] Sessão reiniciada!')
     } else if (currentSession.status === 'STOPPED') {
       // Se está parada, inicia
       console.log('[WhatsApp] Sessão parada, iniciando...')
-      await wahaService.startSession()
+      await wahaService.startSession(sessionName)
       console.log('[WhatsApp] Sessão iniciada!')
     } else if (currentSession.status === 'WORKING') {
       // Já está conectada
@@ -441,8 +461,8 @@ export const startWhatsAppSession = async (
     } else {
       // Qualquer outro status, tenta criar/iniciar
       console.log('[WhatsApp] Criando/iniciando sessão...')
-      await wahaService.createSession()
-      await wahaService.startSession()
+      await wahaService.createSession(sessionName)
+      await wahaService.startSession(sessionName)
     }
     
     // Aguarda um pouco para o status atualizar
@@ -451,7 +471,7 @@ export const startWhatsAppSession = async (
     
     // Verifica status final
     console.log('[WhatsApp] Verificando status final...')
-    const sessionInfo = await wahaService.getSessionInfo()
+    const sessionInfo = await wahaService.getSessionInfo(sessionName)
     console.log('[WhatsApp] Status final:', sessionInfo.status)
     
     console.log('[WhatsApp] ==========================================')

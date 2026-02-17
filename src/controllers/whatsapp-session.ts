@@ -86,6 +86,9 @@ export const startUserSession = async (
 ): Promise<void> => {
   try {
     const userId = req.user?.id
+    
+    console.log('[DEBUG] req.user:', req.user)
+    console.log('[DEBUG] userId:', userId)
 
     if (!userId) {
       res.status(401).json({ error: 'Usuário não autenticado' })
@@ -93,6 +96,7 @@ export const startUserSession = async (
     }
 
     const sessionName = wahaService.generateSessionName(userId)
+    console.log('[DEBUG] sessionName:', sessionName)
 
     // Busca ou cria sessão no banco
     let session = await prisma.whatsAppSession.findFirst({
