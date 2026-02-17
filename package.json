@@ -5,7 +5,7 @@
   "main": "dist/server.js",
   "type": "module",
   "scripts": {
-    "start": "node --no-warnings --experimental-strip-types src/server.ts",
+    "start": "node --no-warnings --env-file .env --experimental-strip-types src/server.ts",
     "dev": "node --no-warnings --env-file .env --experimental-strip-types --watch src/server.ts",
     "test:db": "node --no-warnings --env-file .env --experimental-strip-types test-db.ts",
     "start:all": "npm run start:waha && sleep 5 && npm run dev",
