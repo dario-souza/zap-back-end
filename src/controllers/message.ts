@@ -218,12 +218,14 @@ export const sendMessageNow = async (
       return
     }
 
+    const sessionName = wahaService.generateSessionName(userId);
+
     // Verifica se WAHA API está configurada
-    const isConnected = await wahaService.checkConnection()
+    const isConnected = await wahaService.checkConnection(sessionName)
     if (!isConnected) {
       res.status(503).json({ 
-        error: 'WhatsApp não conectado. Configure a WAHA API primeiro.',
-        setup: 'Veja o arquivo WHATSAPP_SETUP.md'
+        error: 'WhatsApp não conectado. Configure a sessão primeiro.',
+        setup: 'Acesse /api/whatsapp/status para verificar'
       })
       return
     }
@@ -231,6 +233,7 @@ export const sendMessageNow = async (
     // Envia mensagem via WhatsApp
     try {
       const sentMessage = await wahaService.sendTextMessage(
+        sessionName,
         message.contact.phone,
         message.content
       )
@@ -277,7 +280,7 @@ export const sendMessageNow = async (
   }
 }
 
-// Verificar status da conexão com WhatsApp
+// Verificar status da conexão com WhatsApp do usuário
 export const checkWhatsAppStatus = async (
   req: Request,
   res: Response,
@@ -329,16 +332,18 @@ export const sendTestMessage = async (
       return
     }
 
-    const isConnected = await wahaService.checkConnection()
+    const sessionName = wahaService.generateSessionName(userId);
+    const isConnected = await wahaService.checkConnection(sessionName)
+    
     if (!isConnected) {
       res.status(503).json({ 
         error: 'WhatsApp não conectado',
-        setup: 'Configure a WAHA API primeiro'
+        setup: 'Configure a sessão primeiro'
       })
       return
     }
 
-    await wahaService.sendTextMessage(phone, message)
+    await wahaService.sendTextMessage(sessionName, phone, message)
 
     res.json({
       sent: true,
@@ -353,13 +358,16 @@ export const sendTestMessage = async (
   }
 }
 
-// Obter QR Code para conectar WhatsApp
+// Obter QR Code para conectar WhatsApp do usuário
 export const getQRCode = async (
   req: Request,
   res: Response,
 ): Promise<void> => {
   try {
-    const qrData = await wahaService.getQRCode()
+    const userId = (req as any).userId
+    const sessionName = wahaService.generateSessionName(userId);
+    
+    const qrData = await wahaService.getQRCode(sessionName)
     
     res.json({
       qrCode: qrData.qrCode,
@@ -375,13 +383,16 @@ export const getQRCode = async (
   }
 }
 
-// Desconectar WhatsApp
+// Desconectar WhatsApp do usuário
 export const disconnectWhatsApp = async (
   req: Request,
   res: Response,
 ): Promise<void> => {
   try {
-    await wahaService.disconnect()
+    const userId = (req as any).userId
+    const sessionName = wahaService.generateSessionName(userId);
+    
+    await wahaService.disconnect(sessionName)
     res.json({ message: 'WhatsApp desconectado com sucesso' })
   } catch (error: any) {
     res.status(500).json({ 

@@ -6,9 +6,8 @@ import { MessageStatus } from '@prisma/client';
 export class CronService {
   private isRunning: boolean = false;
   private task: cron.ScheduledTask | null = null;
-  private processingMessages: Set<string> = new Set(); // Evita processar a mesma mensagem 2x
+  private processingMessages: Set<string> = new Set();
 
-  // Iniciar o cron job
   start() {
     if (this.isRunning) {
       console.log('[Cron] Serviço já está rodando');
@@ -17,7 +16,6 @@ export class CronService {
 
     console.log('[Cron] Iniciando serviço de agendamento...');
     
-    // Executa a cada minuto - processa mensagens agendadas
     this.task = cron.schedule('* * * * *', async () => {
       await this.processScheduledMessages();
     });
@@ -26,7 +24,6 @@ export class CronService {
     console.log('[Cron] Serviço iniciado - verificando a cada minuto');
   }
 
-  // Parar o cron job
   stop() {
     if (this.task) {
       this.task.stop();
@@ -36,7 +33,6 @@ export class CronService {
     }
   }
 
-  // Processar mensagens agendadas
   private async processScheduledMessages() {
     try {
       const now = new Date();
@@ -46,11 +42,12 @@ export class CronService {
         where: {
           status: MessageStatus.SCHEDULED,
           scheduledAt: {
-            lte: now, // Menor ou igual a data/hora atual
+            lte: now,
           },
         },
         include: {
           contact: true,
+          user: true,
         },
       });
 
@@ -60,100 +57,107 @@ export class CronService {
 
       console.log(`[Cron] Encontradas ${scheduledMessages.length} mensagens para enviar`);
 
-      // Verifica se WhatsApp está conectado
-      const isConnected = await wahaService.checkConnection();
-      if (!isConnected) {
-        console.log('[Cron] WhatsApp não conectado, não é possível enviar mensagens');
-        return;
+      // Agrupa mensagens por usuário para verificar conexão de cada um
+      const messagesByUser = new Map();
+      for (const message of scheduledMessages) {
+        if (!messagesByUser.has(message.userId)) {
+          messagesByUser.set(message.userId, []);
+        }
+        messagesByUser.get(message.userId).push(message);
       }
 
-      // Envia cada mensagem
-      for (const message of scheduledMessages) {
-        // Evita processar a mesma mensagem 2x simultaneamente
-        if (this.processingMessages.has(message.id)) {
-          console.log(`[Cron] Mensagem ${message.id} já está sendo processada, pulando...`);
-          continue;
-        }
-        
-        this.processingMessages.add(message.id);
-        
-        try {
-          console.log(`[Cron] Enviando mensagem ${message.id} para ${message.contact.phone}`);
-          
-          let sentMessage;
-          try {
-            sentMessage = await wahaService.sendTextMessage(
-              message.contact.phone,
-              message.content
-            );
-            console.log(`[Cron] Resposta WAHA:`, JSON.stringify(sentMessage));
-          } catch (sendError: any) {
-            console.error(`[Cron] Erro no sendTextMessage:`, sendError.message);
-            console.error(`[Cron] Stack:`, sendError.stack);
-            throw sendError;
-          }
-
-          // Atualiza status para SENT e salva o externalId
-          try {
-            await prisma.message.update({
-              where: { id: message.id },
-              data: {
-                status: MessageStatus.SENT,
-                sentAt: new Date(),
-                externalId: sentMessage.id || null,
-              },
-            });
-            console.log(`[Cron] Mensagem ${message.id} atualizada no banco com sucesso`);
-          } catch (dbError: any) {
-            console.error(`[Cron] Erro ao atualizar banco para mensagem ${message.id}:`, dbError.message);
-            throw dbError;
-          }
-
-          console.log(`[Cron] Mensagem ${message.id} enviada com sucesso (ID: ${sentMessage.id})`);
-        } catch (error: any) {
-          console.error(`[Cron] Erro ao enviar mensagem ${message.id}:`, error.message);
-          console.error(`[Cron] Stack completo:`, error.stack);
-          
-          // Marca como falha (somente se ainda estiver como SCHEDULED)
-          try {
-            const currentMessage = await prisma.message.findUnique({
-              where: { id: message.id },
-              select: { status: true }
-            });
-            
-            if (currentMessage?.status === MessageStatus.SCHEDULED) {
-              await prisma.message.update({
-                where: { id: message.id },
-                data: {
-                  status: MessageStatus.FAILED,
-                },
-              });
-              console.log(`[Cron] Mensagem ${message.id} marcada como FAILED`);
-            } else {
-              console.log(`[Cron] Mensagem ${message.id} já não está mais como SCHEDULED (status atual: ${currentMessage?.status}), ignorando`);
-            }
-          } catch (dbError: any) {
-            console.error(`[Cron] Erro ao marcar mensagem como FAILED:`, dbError.message);
-          }
-        } finally {
-          // Remove do Set de processamento
-          this.processingMessages.delete(message.id);
-        }
+      // Processa mensagens de cada usuário
+      for (const [userId, messages] of messagesByUser) {
+        await this.processUserMessages(userId, messages);
       }
     } catch (error: any) {
       console.error('[Cron] Erro ao processar mensagens agendadas:', error.message);
     }
   }
 
-  // Status do serviço
+  private async processUserMessages(userId: string, messages: any[]) {
+    const sessionName = wahaService.generateSessionName(userId);
+    
+    // Verifica se o WhatsApp do usuário está conectado
+    const isConnected = await wahaService.checkConnection(sessionName);
+    if (!isConnected) {
+      console.log(`[Cron] WhatsApp do usuário ${userId} não conectado, pulando ${messages.length} mensagens`);
+      return;
+    }
+
+    for (const message of messages) {
+      if (this.processingMessages.has(message.id)) {
+        console.log(`[Cron] Mensagem ${message.id} já está sendo processada, pulando...`);
+        continue;
+      }
+      
+      this.processingMessages.add(message.id);
+      
+      try {
+        console.log(`[Cron] Enviando mensagem ${message.id} para ${message.contact.phone} (Usuário: ${userId})`);
+        
+        let sentMessage;
+        try {
+          sentMessage = await wahaService.sendTextMessage(
+            sessionName,
+            message.contact.phone,
+            message.content
+          );
+          console.log(`[Cron] Resposta WAHA:`, JSON.stringify(sentMessage));
+        } catch (sendError: any) {
+          console.error(`[Cron] Erro no sendTextMessage:`, sendError.message);
+          throw sendError;
+        }
+
+        try {
+          await prisma.message.update({
+            where: { id: message.id },
+            data: {
+              status: MessageStatus.SENT,
+              sentAt: new Date(),
+              externalId: sentMessage.id || null,
+            },
+          });
+          console.log(`[Cron] Mensagem ${message.id} atualizada no banco com sucesso`);
+        } catch (dbError: any) {
+          console.error(`[Cron] Erro ao atualizar banco para mensagem ${message.id}:`, dbError.message);
+          throw dbError;
+        }
+
+        console.log(`[Cron] Mensagem ${message.id} enviada com sucesso (ID: ${sentMessage.id})`);
+      } catch (error: any) {
+        console.error(`[Cron] Erro ao enviar mensagem ${message.id}:`, error.message);
+        
+        try {
+          const currentMessage = await prisma.message.findUnique({
+            where: { id: message.id },
+            select: { status: true }
+          });
+          
+          if (currentMessage?.status === MessageStatus.SCHEDULED) {
+            await prisma.message.update({
+              where: { id: message.id },
+              data: {
+                status: MessageStatus.FAILED,
+              },
+            });
+            console.log(`[Cron] Mensagem ${message.id} marcada como FAILED`);
+          }
+        } catch (dbError: any) {
+          console.error(`[Cron] Erro ao marcar mensagem como FAILED:`, dbError.message);
+        }
+      } finally {
+        this.processingMessages.delete(message.id);
+      }
+    }
+  }
+
   getStatus() {
     return {
       isRunning: this.isRunning,
       nextRun: this.task ? 'A cada minuto' : 'Parado',
     };
   }
-
 }
 
-// Instância singleton
 export const cronService = new CronService();

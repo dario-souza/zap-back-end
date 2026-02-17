@@ -1,15 +1,22 @@
 {
-  "$schema": "https://json.schemastore.org/tsconfig",
-  "_version": "22.0.0",
+  "$schema": "https://www.schemastore.org/tsconfig",
+  "_version": "24.0.0",
 
   "compilerOptions": {
-    "lib": ["es2024", "ESNext.Array", "ESNext.Collection", "ESNext.Iterator"],
+    "lib": [
+      "es2024",
+      "ESNext.Array",
+      "ESNext.Collection",
+      "ESNext.Error",
+      "ESNext.Iterator",
+      "ESNext.Promise"
+    ],
     "module": "nodenext",
-    "target": "es2022",
+    "target": "es2024",
     "noEmit": true,
+    "allowImportingTsExtensions": true,
     "strict": true,
     "esModuleInterop": true,
-    "allowImportingTsExtensions": true,
     "skipLibCheck": true,
     "moduleResolution": "node16"
   }

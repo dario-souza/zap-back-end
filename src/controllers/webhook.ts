@@ -80,15 +80,46 @@ export class WebhookController {
     }
   }
 
+  // Extrai userId do nome da sessão (ex: "user_abc123" -> "abc123")
+  private extractUserIdFromSession(sessionName: string): string | null {
+    if (sessionName.startsWith('user_')) {
+      return sessionName.replace('user_', '');
+    }
+    return null;
+  }
+
   // Handler para mudanças de status da sessão
   private async handleSessionStatus(event: WAHAWebhookEvent) {
     const { status } = event.payload;
+    const sessionName = event.session;
+    
     console.log(`[WAHA Session] Status alterado: ${status}`, {
-      session: event.session,
+      session: sessionName,
     });
 
-    // Aqui você pode implementar lógica adicional
-    // Por exemplo: notificar usuário, atualizar banco de dados, etc.
+    // Extrai userId da sessão e atualiza banco
+    const userId = this.extractUserIdFromSession(sessionName);
+    if (userId) {
+      try {
+        const whatsappSession = await prisma.whatsAppSession.findFirst({
+          where: { sessionId: sessionName },
+        });
+
+        if (whatsappSession) {
+          await prisma.whatsAppSession.update({
+            where: { id: whatsappSession.id },
+            data: {
+              status: status,
+              phoneNumber: event.payload.me?.id?.replace('@c.us', '').replace('@lid', '') || whatsappSession.phoneNumber,
+              profileName: event.payload.me?.pushName || whatsappSession.profileName,
+            },
+          });
+          console.log(`[WAHA Session] Sessão ${sessionName} atualizada no banco`);
+        }
+      } catch (error) {
+        console.error(`[WAHA Session] Erro ao atualizar sessão no banco:`, error);
+      }
+    }
     
     switch (status) {
       case 'WORKING':
