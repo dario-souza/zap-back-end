@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "node --no-warnings --env-file .env --experimental-strip-types --watch src/server.ts",
-    "start": "tsx src/server.ts",
+    "start": "node --no-warnings --env-file .env --experimental-strip-types src/server.ts",
     "test:db": "node --no-warnings --env-file .env --experimental-strip-types test-db.ts",
     "start:all": "npm run start:waha && sleep 5 && npm run dev",
     "start:waha": "docker compose -f docker-compose.waha.yml up -d",
@@ -29,10 +29,8 @@
     "@prisma/client": "6.19",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
-    "dotenv": "^17.2.4",
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.2",
-    "node-cron": "^4.2.1",
-    "tsx": "^4.19.2"
+    "node-cron": "^4.2.1"
   }
 }
