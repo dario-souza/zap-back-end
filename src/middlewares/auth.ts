@@ -4,6 +4,11 @@ import { prisma } from '../lib/prisma.ts'
 
 export interface AuthRequest extends Request {
   userId?: string
+  user?: {
+    id: string
+    email: string
+    name: string | null
+  }
 }
 
 export const authMiddleware = async (
@@ -33,6 +38,11 @@ export const authMiddleware = async (
     }
 
     req.userId = decoded.userId
+    req.user = {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+    }
     next()
   } catch (error) {
     res.status(401).json({ error: 'Token inválido' })
