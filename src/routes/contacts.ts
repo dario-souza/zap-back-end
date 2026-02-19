@@ -5,6 +5,7 @@ import {
   createContact,
   updateContact,
   deleteContact,
+  deleteAllContacts,
 } from '../controllers/contact.ts';
 import { authMiddleware } from '../middlewares/auth.ts';
 
@@ -17,5 +18,6 @@ router.get('/:id', getContactById);
 router.post('/', createContact);
 router.put('/:id', updateContact);
 router.delete('/:id', deleteContact);
+router.delete('/', deleteAllContacts);
 
 export default router;

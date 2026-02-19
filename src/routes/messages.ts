@@ -5,6 +5,7 @@ import {
   createMessage,
   updateMessage,
   deleteMessage,
+  deleteAllMessages,
   sendMessageNow,
   checkWhatsAppStatus,
   sendTestMessage,
@@ -50,6 +51,7 @@ router.post('/', createMessage);
 router.post('/test', sendTestMessage);
 router.put('/:id', updateMessage);
 router.delete('/:id', deleteMessage);
+router.delete('/', deleteAllMessages);
 router.post('/:id/send', sendMessageNow);
 
 export default router;

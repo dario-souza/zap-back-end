@@ -194,6 +194,23 @@ export const deleteMessage = async (
   }
 }
 
+export const deleteAllMessages = async (
+  req: AuthRequest,
+  res: Response,
+): Promise<void> => {
+  try {
+    const userId = req.user?.id
+
+    const { count } = await prisma.message.deleteMany({
+      where: { userId },
+    })
+
+    res.json({ message: `${count} mensagens excluídas com sucesso` })
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao excluir mensagens' })
+  }
+}
+
 export const sendMessageNow = async (
   req: AuthRequest,
   res: Response,
