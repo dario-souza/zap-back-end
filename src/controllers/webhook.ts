@@ -156,6 +156,12 @@ export class WebhookController {
   private async handleMessageAck(event: WAHAWebhookEvent) {
     const { messageId: rawMessageId, ack } = event.payload;
     
+    // Verifica se messageId existe
+    if (!rawMessageId) {
+      console.log('[WAHA Message ACK] messageId não encontrado no payload, ignorando');
+      return;
+    }
+    
     // Extrai o ID real da mensagem
     const messageId = rawMessageId.includes('_') 
       ? rawMessageId.split('_').pop() 
@@ -252,6 +258,13 @@ export class WebhookController {
     if (payload.ack !== undefined) {
       // Extrai o ID real da mensagem - pode vir como "true_5511...@c.us_3EB0..." ou direto "3EB0..."
       const rawMessageId = payload.id;
+      
+      // Verifica se o ID existe
+      if (!rawMessageId) {
+        console.log('[WAHA Message ANY] ID da mensagem não encontrado, ignorando');
+        return;
+      }
+      
       const messageId = rawMessageId.includes('_') 
         ? rawMessageId.split('_').pop()  // Pega a última parte após os underscores
         : rawMessageId;
