@@ -20,6 +20,7 @@ model User {
   contacts          Contact[]
   messages          Message[]
   whatsappSessions  WhatsAppSession[]
+  messageTemplates  MessageTemplate[]
 
   @@map("users")
 }
@@ -103,4 +104,17 @@ model WhatsAppSession {
   @@index([userId])
   @@index([status])
   @@map("whatsapp_sessions")
+}
+
+model MessageTemplate {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  name      String
+  content   String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  userId    String   @db.ObjectId
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("message_templates")
 }
