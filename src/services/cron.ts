@@ -2,6 +2,7 @@ import cron from 'node-cron';
 import { prisma } from '../lib/prisma.ts';
 import { wahaService } from './waha.ts';
 import { MessageStatus, RecurrenceType } from '@prisma/client';
+import { processTemplateVariables } from '../lib/utils.ts';
 
 export class CronService {
   private isRunning: boolean = false;
@@ -96,12 +97,18 @@ export class CronService {
       try {
         console.log(`[Cron] Enviando mensagem ${message.id} para ${message.contact.phone} (Usuário: ${userId})`);
         
+        // Processa variáveis do template (nome, email)
+        const processedContent = processTemplateVariables(
+          message.content,
+          message.contact
+        )
+
         let sentMessage;
         try {
           sentMessage = await wahaService.sendTextMessage(
             sessionName,
             message.contact.phone,
-            message.content
+            processedContent
           );
           console.log(`[Cron] Resposta WAHA:`, JSON.stringify(sentMessage));
         } catch (sendError: any) {

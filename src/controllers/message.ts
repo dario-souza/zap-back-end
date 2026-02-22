@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma.ts'
 import { MessageType, MessageStatus, RecurrenceType } from '@prisma/client'
 import { wahaService } from '../services/waha.ts'
 import type { AuthRequest } from '../middlewares/auth.ts'
+import { processTemplateVariables } from '../lib/utils.ts'
 
 export const getAllMessages = async (
   req: AuthRequest,
@@ -29,6 +30,7 @@ export const getAllMessages = async (
           select: {
             name: true,
             phone: true,
+            email: true,
           },
         },
       },
@@ -56,6 +58,7 @@ export const getMessageById = async (
           select: {
             name: true,
             phone: true,
+            email: true,
           },
         },
       },
@@ -141,6 +144,7 @@ export const createBulkMessages = async (
                 id: true,
                 name: true,
                 phone: true,
+                email: true,
               },
             },
           },
@@ -165,10 +169,16 @@ export const createBulkMessages = async (
       const results = []
       for (const message of messages) {
         try {
+          // Processa variáveis do template (nome, email)
+          const processedContent = processTemplateVariables(
+            message.content,
+            message.contact
+          )
+
           const sentMessage = await wahaService.sendTextMessage(
             sessionName,
             message.contact.phone,
-            message.content
+            processedContent
           )
           
           await prisma.message.update({
@@ -391,12 +401,18 @@ export const sendMessageNow = async (
       return
     }
 
+    // Processa variáveis do template (nome, email)
+    const processedContent = processTemplateVariables(
+      message.content,
+      message.contact
+    )
+
     // Envia mensagem via WhatsApp
     try {
       const sentMessage = await wahaService.sendTextMessage(
         sessionName,
         message.contact.phone,
-        message.content
+        processedContent
       )
 
       // Atualiza status no banco com o externalId (ID do WhatsApp)
