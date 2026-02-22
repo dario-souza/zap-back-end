@@ -25,9 +25,29 @@ export const getAllMessages = async (
 
     const messages = await prisma.message.findMany({
       where,
-      include: {
+      select: {
+        id: true,
+        content: true,
+        type: true,
+        status: true,
+        scheduledAt: true,
+        sentAt: true,
+        deliveredAt: true,
+        readAt: true,
+        recurrenceType: true,
+        contactIds: true,
+        originalMessageId: true,
+        isRecurringClone: true,
+        reminderDays: true,
+        reminderSent: true,
+        isReminder: true,
+        createdAt: true,
+        updatedAt: true,
+        contactId: true,
+        userId: true,
         contact: {
           select: {
+            id: true,
             name: true,
             phone: true,
             email: true,
