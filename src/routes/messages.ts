@@ -4,6 +4,7 @@ import {
   getMessageById,
   createMessage,
   createBulkMessages,
+  createMessageWithReminder,
   updateMessage,
   deleteMessage,
   deleteAllMessages,
@@ -23,6 +24,7 @@ router.use(authMiddleware);
 
 router.get('/', getAllMessages);
 router.post('/bulk', createBulkMessages);
+router.post('/with-reminder', createMessageWithReminder);
 router.get('/whatsapp/status', checkWhatsAppStatus);
 router.get('/whatsapp/qrcode', getQRCode);
 router.post('/whatsapp/start', startWhatsAppSession);

@@ -678,3 +678,104 @@ export const startWhatsAppSession = async (
     })
   }
 }
+
+export const createMessageWithReminder = async (
+  req: AuthRequest,
+  res: Response,
+): Promise<void> => {
+  try {
+    const userId = req.user?.id
+    const { content, contactId, scheduledAt, reminderDays } = req.body
+
+    if (!content) {
+      res.status(400).json({ error: 'O conteúdo da mensagem é obrigatório' })
+      return
+    }
+
+    if (!contactId) {
+      res.status(400).json({ error: 'Selecione um contato' })
+      return
+    }
+
+    if (!scheduledAt) {
+      res.status(400).json({ error: 'Defina a data da consulta' })
+      return
+    }
+
+    if (!reminderDays || ![1, 2].includes(reminderDays)) {
+      res.status(400).json({ error: 'Defina quantos dias antes deve enviar o lembrete (1 ou 2)' })
+      return
+    }
+
+    const contact = await prisma.contact.findFirst({
+      where: { id: contactId, userId },
+    })
+
+    if (!contact) {
+      res.status(404).json({ error: 'Contato não encontrado' })
+      return
+    }
+
+    const consultationDate = new Date(scheduledAt)
+    const reminderDate = new Date(consultationDate)
+    reminderDate.setDate(reminderDate.getDate() - reminderDays)
+
+    // Cria a mensagem da consulta (agendada)
+    const consultationMessage = await prisma.message.create({
+      data: {
+        content,
+        type: MessageType.TEXT,
+        status: MessageStatus.SCHEDULED,
+        scheduledAt: consultationDate,
+        reminderDays,
+        userId,
+        contactId,
+      },
+      include: {
+        contact: {
+          select: {
+            id: true,
+            name: true,
+            phone: true,
+            email: true,
+          },
+        },
+      },
+    })
+
+    // Cria a mensagem de lembrete (agendada para X dias antes)
+    const reminderContent = `⏰ Lembrete: Você tem uma consulta agendada para ${consultationDate.toLocaleDateString('pt-BR')} às ${consultationDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}.\n\n${content}\n\n*Por favor, responda SIM para confirmar ou NÃO para cancelar.*`
+
+    const reminderMessage = await prisma.message.create({
+      data: {
+        content: reminderContent,
+        type: MessageType.TEXT,
+        status: MessageStatus.SCHEDULED,
+        scheduledAt: reminderDate,
+        reminderDays,
+        reminderSent: false,
+        isReminder: true,
+        originalMessageId: consultationMessage.id,
+        userId,
+        contactId,
+      },
+      include: {
+        contact: {
+          select: {
+            id: true,
+            name: true,
+            phone: true,
+            email: true,
+          },
+        },
+      },
+    })
+
+    res.status(201).json({
+      consultationMessage,
+      reminderMessage,
+    })
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao criar lembrete' })
+  }
+}

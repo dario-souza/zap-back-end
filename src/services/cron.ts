@@ -123,9 +123,19 @@ export class CronService {
               status: MessageStatus.SENT,
               sentAt: new Date(),
               externalId: sentMessage.id || null,
+              reminderSent: message.isReminder ? true : undefined,
             },
           });
           console.log(`[Cron] Mensagem ${message.id} atualizada no banco com sucesso`);
+
+          // Se era um lembrete, marca como enviado na mensagem original
+          if (message.isReminder && message.originalMessageId) {
+            await prisma.message.update({
+              where: { id: message.originalMessageId },
+              data: { reminderSent: true },
+            });
+            console.log(`[Cron] Lembrete enviado, atualizando mensagem original ${message.originalMessageId}`);
+          }
 
           // Lógica de recorrência mensal
           if (message.recurrenceType === RecurrenceType.MONTHLY) {
