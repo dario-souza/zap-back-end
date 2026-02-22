@@ -56,26 +56,36 @@ enum MessageType {
   VIDEO
 }
 
+enum RecurrenceType {
+  NONE
+  MONTHLY
+}
+
 model Message {
-  id          String        @id @default(auto()) @map("_id") @db.ObjectId
-  content     String
-  type        MessageType   @default(TEXT)
-  status      MessageStatus @default(PENDING)
-  scheduledAt DateTime?     @map("scheduled_at")
-  sentAt      DateTime?     @map("sent_at")
-  deliveredAt DateTime?     @map("delivered_at")
-  readAt      DateTime?     @map("read_at")
-  externalId  String?       @map("external_id")
-  createdAt   DateTime      @default(now()) @map("created_at")
-  updatedAt   DateTime      @updatedAt @map("updated_at")
-  userId      String        @db.ObjectId
-  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  contactId   String        @db.ObjectId
-  contact     Contact       @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  id                String         @id @default(auto()) @map("_id") @db.ObjectId
+  content           String
+  type              MessageType    @default(TEXT)
+  status            MessageStatus  @default(PENDING)
+  scheduledAt       DateTime?      @map("scheduled_at")
+  sentAt            DateTime?      @map("sent_at")
+  deliveredAt       DateTime?      @map("delivered_at")
+  readAt            DateTime?      @map("read_at")
+  externalId        String?        @map("external_id")
+  recurrenceType    RecurrenceType @default(NONE) @map("recurrence_type")
+  contactIds        String[]        @default([]) @map("contact_ids")
+  originalMessageId String?        @db.ObjectId @map("original_message_id")
+  isRecurringClone  Boolean        @default(false) @map("is_recurring_clone")
+  createdAt         DateTime       @default(now()) @map("created_at")
+  updatedAt         DateTime       @updatedAt @map("updated_at")
+  userId            String         @db.ObjectId
+  user              User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contactId         String         @db.ObjectId
+  contact           Contact        @relation(fields: [contactId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([contactId])
   @@index([status])
+  @@index([scheduledAt])
   @@map("messages")
 }
 

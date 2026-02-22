@@ -1,6 +1,6 @@
 import type { Response } from 'express'
 import { prisma } from '../lib/prisma.ts'
-import { MessageType, MessageStatus } from '@prisma/client'
+import { MessageType, MessageStatus, RecurrenceType } from '@prisma/client'
 import { wahaService } from '../services/waha.ts'
 import type { AuthRequest } from '../middlewares/auth.ts'
 
@@ -69,6 +69,149 @@ export const getMessageById = async (
     res.json(message)
   } catch (error) {
     res.status(500).json({ error: 'Erro ao buscar mensagem' })
+  }
+}
+
+// Criar mensagens em massa para múltiplos contatos
+export const createBulkMessages = async (
+  req: AuthRequest,
+  res: Response,
+): Promise<void> => {
+  try {
+    const userId = req.user?.id
+    const { 
+      content, 
+      contactIds, 
+      type = 'TEXT', 
+      scheduledAt, 
+      sendNow = false,
+      recurrenceType = RecurrenceType.NONE 
+    } = req.body
+
+    if (!contactIds || !Array.isArray(contactIds) || contactIds.length === 0) {
+      res.status(400).json({ error: 'É necessário selecionar pelo menos um contato' })
+      return
+    }
+
+    if (!content) {
+      res.status(400).json({ error: 'O conteúdo da mensagem é obrigatório' })
+      return
+    }
+
+    // Valida se todos os contatos existem e pertencem ao usuário
+    const contacts = await prisma.contact.findMany({
+      where: {
+        id: { in: contactIds },
+        userId,
+      },
+    })
+
+    if (contacts.length !== contactIds.length) {
+      res.status(400).json({ error: 'Um ou mais contatos não encontrados' })
+      return
+    }
+
+    // Limite de 50 contatos por envio em massa
+    if (contactIds.length > 50) {
+      res.status(400).json({ error: 'Máximo de 50 contatos por envio em massa' })
+      return
+    }
+
+    const messageStatus = sendNow 
+      ? MessageStatus.PENDING 
+      : (scheduledAt ? MessageStatus.SCHEDULED : MessageStatus.PENDING)
+
+    // Criar uma mensagem para cada contato
+    const messages = await Promise.all(
+      contactIds.map((contactId: string) =>
+        prisma.message.create({
+          data: {
+            content,
+            type: type as MessageType,
+            status: messageStatus,
+            scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
+            userId,
+            contactId,
+            contactIds: contactIds,
+            recurrenceType: recurrenceType as RecurrenceType,
+          },
+          include: {
+            contact: {
+              select: {
+                id: true,
+                name: true,
+                phone: true,
+              },
+            },
+          },
+        })
+      )
+    )
+
+    // Se sendNow for true, enviar imediatamente
+    if (sendNow) {
+      const sessionName = wahaService.generateSessionName(userId)
+      const isConnected = await wahaService.checkConnection(sessionName)
+      
+      if (!isConnected) {
+        res.status(503).json({ 
+          error: 'WhatsApp não conectado. Configure a sessão primeiro.',
+          messages: messages,
+          sent: false
+        })
+        return
+      }
+
+      const results = []
+      for (const message of messages) {
+        try {
+          const sentMessage = await wahaService.sendTextMessage(
+            sessionName,
+            message.contact.phone,
+            message.content
+          )
+          
+          await prisma.message.update({
+            where: { id: message.id },
+            data: {
+              status: MessageStatus.SENT,
+              sentAt: new Date(),
+              externalId: sentMessage.id,
+            },
+          })
+          
+          results.push({ id: message.id, sent: true })
+        } catch (err: any) {
+          await prisma.message.update({
+            where: { id: message.id },
+            data: { status: MessageStatus.FAILED },
+          })
+          results.push({ id: message.id, sent: false, error: err.message })
+        }
+        
+        // Delay de 2 segundos entre envios para evitar bloqueios
+        await new Promise(resolve => setTimeout(resolve, 2000))
+      }
+
+      res.status(201).json({
+        messages,
+        results,
+        sent: true,
+        total: messages.length,
+        successCount: results.filter((r: any) => r.sent).length,
+      })
+      return
+    }
+
+    res.status(201).json({
+      messages,
+      total: messages.length,
+      scheduled: !!scheduledAt,
+      recurrence: recurrenceType,
+    })
+  } catch (error: any) {
+    console.error('[createBulkMessages] Erro:', error)
+    res.status(500).json({ error: 'Erro ao criar mensagens em massa' })
   }
 }
 

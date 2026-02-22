@@ -1,7 +1,7 @@
 import cron from 'node-cron';
 import { prisma } from '../lib/prisma.ts';
 import { wahaService } from './waha.ts';
-import { MessageStatus } from '@prisma/client';
+import { MessageStatus, RecurrenceType } from '@prisma/client';
 
 export class CronService {
   private isRunning: boolean = false;
@@ -119,6 +119,40 @@ export class CronService {
             },
           });
           console.log(`[Cron] Mensagem ${message.id} atualizada no banco com sucesso`);
+
+          // Lógica de recorrência mensal
+          if (message.recurrenceType === RecurrenceType.MONTHLY) {
+            console.log(`[Cron] Mensagem ${message.id} é recorrente mensal, criando clone...`);
+            
+            // Calcular próxima data (mesmo dia do próximo mês)
+            const scheduledDate = new Date(message.scheduledAt);
+            const nextMonth = new Date(scheduledDate);
+            nextMonth.setMonth(nextMonth.getMonth() + 1);
+            
+            // Criar clone para o próximo mês
+            await prisma.message.create({
+              data: {
+                content: message.content,
+                type: message.type,
+                status: MessageStatus.SCHEDULED,
+                scheduledAt: nextMonth,
+                userId: message.userId,
+                contactId: message.contactId,
+                contactIds: message.contactIds || [message.contactId],
+                recurrenceType: RecurrenceType.MONTHLY,
+                originalMessageId: message.originalMessageId || message.id,
+                isRecurringClone: true,
+              },
+            });
+            console.log(`[Cron] Clone criado para ${nextMonth.toISOString()}`);
+          } else {
+            // Se não é recorrente, deletar após envio (conforme solicitado)
+            console.log(`[Cron] Mensagem ${message.id} não é recorrente, deletando após envio...`);
+            await prisma.message.delete({
+              where: { id: message.id },
+            });
+            console.log(`[Cron] Mensagem ${message.id} deletada`);
+          }
         } catch (dbError: any) {
           console.error(`[Cron] Erro ao atualizar banco para mensagem ${message.id}:`, dbError.message);
           throw dbError;

@@ -3,6 +3,7 @@ import {
   getAllMessages,
   getMessageById,
   createMessage,
+  createBulkMessages,
   updateMessage,
   deleteMessage,
   deleteAllMessages,
@@ -21,6 +22,7 @@ const router = Router();
 router.use(authMiddleware);
 
 router.get('/', getAllMessages);
+router.post('/bulk', createBulkMessages);
 router.get('/whatsapp/status', checkWhatsAppStatus);
 router.get('/whatsapp/qrcode', getQRCode);
 router.post('/whatsapp/start', startWhatsAppSession);
