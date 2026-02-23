@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
 import { prisma } from '../lib/prisma.ts';
-import { MessageStatus } from '@prisma/client';
+import { MessageStatus, ConfirmationStatus } from '@prisma/client';
 
 // Tipos de eventos da WAHA
 interface WAHAWebhookEvent {
@@ -143,13 +143,55 @@ export class WebhookController {
     console.log('[WAHA Message] Mensagem recebida:', {
       from: message.from,
       type: message.type,
+      body: message.body,
       timestamp: message.timestamp,
     });
 
-    // Aqui você pode implementar:
-    // - Respostas automáticas
-    // - Logging de mensagens recebidas
-    // - Integrações com outros sistemas
+    // Extrai o número do contato (remove @c.us ou @lid)
+    const phoneNumber = message.from?.replace('@c.us', '').replace('@lid', '');
+    if (!phoneNumber) {
+      console.log('[WAHA Message] Número do remetente não encontrado');
+      return;
+    }
+
+    // Detecta resposta do contato
+    const responseText = message.body?.toLowerCase().trim() || '';
+    
+    // Palavras que indicam confirmação positiva
+    const positiveResponses = ['sim', 'yes', 'confirmei', 'vou ir', 'confirmado', 'ok', 'claro', 'com certeza', 'presente'];
+    // Palavras que indicam confirmação negativa
+    const negativeResponses = ['não', 'nao', 'no', 'não vou', 'cancela', 'cancelado', 'não posso', 'vou faltar', 'não irei'];
+
+    const isPositive = positiveResponses.some(word => responseText.includes(word));
+    const isNegative = negativeResponses.some(word => responseText.includes(word));
+
+    if (isPositive || isNegative) {
+      console.log(`[WAHA Confirmation] Resposta detectada: ${responseText} (${isPositive ? 'POSITIVA' : 'NEGATIVA'}) para o número: ${phoneNumber}`);
+
+      // Busca confirmação pendente para este número de telefone
+      const confirmation = await prisma.confirmation.findFirst({
+        where: {
+          contactPhone: phoneNumber,
+          status: ConfirmationStatus.PENDING,
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (confirmation) {
+        const newStatus = isPositive ? ConfirmationStatus.CONFIRMED : ConfirmationStatus.DENIED;
+        await prisma.confirmation.update({
+          where: { id: confirmation.id },
+          data: {
+            status: newStatus,
+            response: message.body,
+            respondedAt: new Date(),
+          },
+        });
+        console.log(`[WAHA Confirmation] ✅ Confirmação ${confirmation.id} atualizada para ${newStatus}`);
+      } else {
+        console.log(`[WAHA Confirmation] Nenhuma confirmação pendente encontrada para ${phoneNumber}`);
+      }
+    }
   }
 
   // Handler para confirmação de entrega (ack)
