@@ -57,8 +57,14 @@ export const createContact = async (
     const userId = req.user?.id
     const { name, phone, email } = req.body
 
+    // Normaliza o telefone: remove tudo que não é dígito e adiciona DDI 55 se necessário
+    let normalizedPhone = phone.replace(/\D/g, '');
+    if (normalizedPhone.length >= 10 && !normalizedPhone.startsWith('55')) {
+      normalizedPhone = '55' + normalizedPhone;
+    }
+
     const existingContact = await prisma.contact.findFirst({
-      where: { phone, userId },
+      where: { phone: normalizedPhone, userId },
     })
 
     if (existingContact) {
@@ -69,11 +75,13 @@ export const createContact = async (
     const contact = await prisma.contact.create({
       data: {
         name,
-        phone,
+        phone: normalizedPhone,
         email,
         userId,
       },
     })
+
+    console.log('[Contact] Contato criado:', contact.id, 'com telefone:', normalizedPhone)
 
     res.status(201).json(contact)
   } catch (error) {
@@ -90,6 +98,15 @@ export const updateContact = async (
     const { id } = req.params
     const { name, phone, email } = req.body
 
+    // Normaliza o telefone se fornecido
+    let normalizedPhone = phone;
+    if (phone) {
+      normalizedPhone = phone.replace(/\D/g, '');
+      if (normalizedPhone.length >= 10 && !normalizedPhone.startsWith('55')) {
+        normalizedPhone = '55' + normalizedPhone;
+      }
+    }
+
     const existingContact = await prisma.contact.findFirst({
       where: { id, userId },
     })
@@ -103,7 +120,7 @@ export const updateContact = async (
       where: { id },
       data: {
         name,
-        phone,
+        phone: normalizedPhone,
         email,
       },
     })
@@ -260,12 +277,15 @@ export const importContactsCSV = async (
         continue
       }
 
-      // Remove caracteres não numéricos do telefone
-      const cleanPhone = phone.replace(/\D/g, '')
+      // Remove caracteres não numéricos do telefone e normaliza
+      let normalizedPhone = phone.replace(/\D/g, '');
+      if (normalizedPhone.length >= 10 && !normalizedPhone.startsWith('55')) {
+        normalizedPhone = '55' + normalizedPhone;
+      }
 
       // Verifica se telefone já existe
       const existingContact = await prisma.contact.findFirst({
-        where: { phone: cleanPhone, userId },
+        where: { phone: normalizedPhone, userId },
       })
 
       if (existingContact) {
@@ -278,7 +298,7 @@ export const importContactsCSV = async (
         await prisma.contact.create({
           data: {
             name,
-            phone: cleanPhone,
+            phone: normalizedPhone,
             email: email || null,
             userId,
           },
