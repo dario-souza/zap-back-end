@@ -755,7 +755,7 @@ export const createMessageWithReminder = async (
       minute: '2-digit',
     })
 
-    // Cria apenas a mensagem de lembrete (enviada X dias antes)
+// Cria apenas a mensagem de lembrete (enviada X dias antes)
     const reminderMessage = await prisma.message.create({
       data: {
         content,
@@ -789,22 +789,29 @@ export const createMessageWithReminder = async (
     }
 
     console.log('[Lembrete] Telefone normalizado:', normalizedPhone, '(original:', contact.phone + ')')
+    console.log('[Lembrete] UserId:', userId)
+    console.log('[Lembrete] EventDate:', eventDate)
 
     // Cria a confirmação vinculada ao lembrete
-    const confirmation = await prisma.confirmation.create({
-      data: {
-        status: ConfirmationStatus.PENDING,
-        contactName: contact.name,
-        contactPhone: normalizedPhone,
-        eventDate: eventDate,
-        messageContent: content,
-        userId,
-      },
-    })
+    try {
+      const confirmation = await prisma.confirmation.create({
+        data: {
+          status: ConfirmationStatus.PENDING,
+          contactName: contact.name,
+          contactPhone: normalizedPhone,
+          eventDate: eventDate,
+          messageContent: content,
+          userId,
+        },
+      })
 
-    console.log('[Lembrete] Confirmação criada:', confirmation.id, 'para telefone:', normalizedPhone)
-
-    res.status(201).json(reminderMessage)
+      console.log('[Lembrete] Confirmação criada com sucesso:', confirmation.id)
+      res.status(201).json(reminderMessage)
+    } catch (confError: any) {
+      console.error('[Lembrete] ERRO ao criar confirmação:', confError.message, confError)
+      // Even if confirmation fails, return the reminder message
+      res.status(201).json(reminderMessage)
+    }
   } catch (error) {
     res.status(500).json({ error: 'Erro ao criar lembrete' })
   }
