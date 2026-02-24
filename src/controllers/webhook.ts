@@ -169,6 +169,45 @@ export class WebhookController {
     const userId = this.extractUserIdFromSession(event.session);
     console.log('[WAHA Message] UserId extraído:', userId);
 
+    // Tenta atualizar o contato com o número correto do WhatsApp
+    if (userId) {
+      try {
+        // Busca contatos que possam corresponder a este número (mesmo sem DDI ou com DDI diferente)
+        const existingContacts = await prisma.contact.findMany({
+          where: { userId },
+        });
+
+        for (const contact of existingContacts) {
+          const contactPhoneClean = contact.phone.replace(/\D/g, '');
+          const messagePhoneClean = phoneNumber.replace(/\D/g, '');
+          
+          // Compara os últimos 10 dígitos
+          if (contactPhoneClean.slice(-10) === messagePhoneClean.slice(-10)) {
+            // Atualiza o contato com o número completo do WhatsApp
+            await prisma.contact.update({
+              where: { id: contact.id },
+              data: { phone: phoneNumber },
+            });
+            console.log('[WAHA] Contato atualizado com número do WhatsApp:', contact.name, phoneNumber);
+
+            // Também atualiza as confirmações pendentes deste contato
+            await prisma.confirmation.updateMany({
+              where: {
+                contactName: contact.name,
+                status: ConfirmationStatus.PENDING,
+              },
+              data: { contactPhone: phoneNumber },
+            });
+            console.log('[WAHA] Confirmações atualizadas para o contato:', contact.name);
+            break;
+          }
+        }
+        }
+      } catch (error) {
+        console.log('[WAHA] Erro ao atualizar contato:', error);
+      }
+    }
+
       // Detecta resposta do contato
       const responseText = message.body?.toLowerCase().trim() || '';
       
@@ -220,11 +259,29 @@ export class WebhookController {
       console.log('[WAHA Confirmation] Normalized phone from message:', phoneNumber);
       console.log('[WAHA Confirmation] All confirmation phones:', normalizedConfirmations.map(c => c.normalizedPhone));
 
+      // Função para verificar se dois números correspondem (compara últimos 10-11 dígitos)
+      const phonesMatch = (phone1: string, phone2: string): boolean => {
+        const clean1 = phone1.replace(/\D/g, '');
+        const clean2 = phone2.replace(/\D/g, '');
+        
+        // Exact match
+        if (clean1 === clean2) return true;
+        
+        // Compara últimos 11 dígitos (número brasileiro com DDI)
+        if (clean1.slice(-11) === clean2.slice(-11)) return true;
+        
+        // Compara últimos 10 dígitos (número brasileiro sem DDI)
+        if (clean1.slice(-10) === clean2.slice(-10)) return true;
+        
+        // Um termina com o outro
+        if (clean1.endsWith(clean2) || clean2.endsWith(clean1)) return true;
+        
+        return false;
+      };
+
       // Busca a confirmação com número correspondente
       const confirmation = normalizedConfirmations.find(c => 
-        c.normalizedPhone === phoneNumber || 
-        phoneNumber.endsWith(c.normalizedPhone) ||
-        c.normalizedPhone.endsWith(phoneNumber)
+        phonesMatch(c.normalizedPhone, phoneNumber)
       );
 
       if (confirmation) {
