@@ -148,11 +148,22 @@ export class WebhookController {
     });
 
     // Extrai o número do contato (remove @c.us ou @lid)
-    const phoneNumber = message.from?.replace('@c.us', '').replace('@lid', '');
+    let phoneNumber = message.from?.replace('@c.us', '').replace('@lid', '');
     if (!phoneNumber) {
       console.log('[WAHA Message] Número do remetente não encontrado');
       return;
     }
+
+    // Normaliza o número: remove tudo que não é dígito
+    phoneNumber = phoneNumber.replace(/\D/g, '');
+    
+    // Se o número tem 10 ou 11 dígitos e não começa com 55, adiciona o DDI 55
+    // Isso trata números brasileiros que podem chegar sem DDI
+    if (phoneNumber.length >= 10 && !phoneNumber.startsWith('55')) {
+      phoneNumber = '55' + phoneNumber;
+    }
+
+    console.log('[WAHA Message] Número normalizado:', phoneNumber);
 
     // Detecta resposta do contato
     const responseText = message.body?.toLowerCase().trim() || '';
@@ -168,14 +179,26 @@ export class WebhookController {
     if (isPositive || isNegative) {
       console.log(`[WAHA Confirmation] Resposta detectada: ${responseText} (${isPositive ? 'POSITIVA' : 'NEGATIVA'}) para o número: ${phoneNumber}`);
 
-      // Busca confirmação pendente para este número de telefone
-      const confirmation = await prisma.confirmation.findFirst({
+      // Busca todas as confirmações pendentes do usuário
+      const confirmations = await prisma.confirmation.findMany({
         where: {
-          contactPhone: phoneNumber,
           status: ConfirmationStatus.PENDING,
         },
         orderBy: { createdAt: 'desc' },
       });
+
+      // Normaliza o número de cada confirmação para comparar
+      const normalizedConfirmations = confirmations.map(c => ({
+        ...c,
+        normalizedPhone: c.contactPhone.replace(/\D/g, ''),
+      }));
+
+      // Busca a confirmação com número correspondente
+      const confirmation = normalizedConfirmations.find(c => 
+        c.normalizedPhone === phoneNumber || 
+        phoneNumber.endsWith(c.normalizedPhone) ||
+        c.normalizedPhone.endsWith(phoneNumber)
+      );
 
       if (confirmation) {
         const newStatus = isPositive ? ConfirmationStatus.CONFIRMED : ConfirmationStatus.DENIED;
