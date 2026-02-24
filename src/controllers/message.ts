@@ -1,6 +1,6 @@
 import type { Response } from 'express'
 import { prisma } from '../lib/prisma.ts'
-import { MessageType, MessageStatus, RecurrenceType } from '@prisma/client'
+import { MessageType, MessageStatus, RecurrenceType, ConfirmationStatus } from '@prisma/client'
 import { wahaService } from '../services/waha.ts'
 import type { AuthRequest } from '../middlewares/auth.ts'
 import { processTemplateVariables } from '../lib/utils.ts'
@@ -777,6 +777,18 @@ export const createMessageWithReminder = async (
             email: true,
           },
         },
+      },
+    })
+
+    // Cria a confirmação vinculada ao lembrete
+    await prisma.confirmation.create({
+      data: {
+        status: ConfirmationStatus.PENDING,
+        contactName: contact.name,
+        contactPhone: contact.phone,
+        eventDate: eventDate,
+        messageContent: content,
+        userId,
       },
     })
 
