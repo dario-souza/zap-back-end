@@ -169,10 +169,15 @@ export class WebhookController {
     const userId = this.extractUserIdFromSession(event.session);
     console.log('[WAHA Message] UserId extraído:', userId);
 
-    // Detecta resposta do contato
-    const responseText = message.body?.toLowerCase().trim() || '';
-    
-    // Palavras que indicam confirmação positiva
+      // Detecta resposta do contato
+      const responseText = message.body?.toLowerCase().trim() || '';
+      
+      console.log('[WAHA Confirmation] ===== DEBUG =====');
+      console.log('[WAHA Confirmation] sessionName:', event.session);
+      console.log('[WAHA Confirmation] userId extraído:', userId);
+      console.log('[WAHA Confirmation] phoneNumber:', phoneNumber);
+
+      // Palavras que indicam confirmação positiva
     const positiveResponses = ['sim', 'yes', 'confirmei', 'vou ir', 'confirmado', 'ok', 'claro', 'com certeza', 'presente'];
     // Palavras que indicam confirmação negativa
     const negativeResponses = ['não', 'nao', 'no', 'não vou', 'cancela', 'cancelado', 'não posso', 'vou faltar', 'não irei'];
@@ -184,13 +189,26 @@ export class WebhookController {
       console.log(`[WAHA Confirmation] Resposta detectada: ${responseText} (${isPositive ? 'POSITIVA' : 'NEGATIVA'}) para o número: ${phoneNumber}`);
 
       // Busca todas as confirmações pendentes do usuário
-      const confirmations = await prisma.confirmation.findMany({
-        where: {
-          status: ConfirmationStatus.PENDING,
-          ...(userId && { userId }),
-        },
-        orderBy: { createdAt: 'desc' },
-      });
+      // Primeiro tenta com o userId extraído da sessão
+      let confirmations;
+      try {
+        confirmations = await prisma.confirmation.findMany({
+          where: {
+            status: ConfirmationStatus.PENDING,
+            userId: userId || undefined,
+          },
+          orderBy: { createdAt: 'desc' },
+        });
+      } catch (error) {
+        console.log('[WAHA Confirmation] Erro na query com userId:', error);
+        // Tenta buscar todas as confirmações pendentes sem filtro de userId
+        confirmations = await prisma.confirmation.findMany({
+          where: {
+            status: ConfirmationStatus.PENDING,
+          },
+          orderBy: { createdAt: 'desc' },
+        });
+      }
 
       // Normaliza o número de cada confirmação para comparar
       const normalizedConfirmations = confirmations.map(c => ({
