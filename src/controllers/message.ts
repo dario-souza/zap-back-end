@@ -780,17 +780,29 @@ export const createMessageWithReminder = async (
       },
     })
 
+    console.log('[Lembrete] Mensagem de lembrete criada:', reminderMessage.id)
+
+    // Normaliza o telefone para o formato padrão (com DDI 55 para Brasil)
+    let normalizedPhone = contact.phone.replace(/\D/g, '');
+    if (normalizedPhone.length >= 10 && !normalizedPhone.startsWith('55')) {
+      normalizedPhone = '55' + normalizedPhone;
+    }
+
+    console.log('[Lembrete] Telefone normalizado:', normalizedPhone, '(original:', contact.phone + ')')
+
     // Cria a confirmação vinculada ao lembrete
-    await prisma.confirmation.create({
+    const confirmation = await prisma.confirmation.create({
       data: {
         status: ConfirmationStatus.PENDING,
         contactName: contact.name,
-        contactPhone: contact.phone,
+        contactPhone: normalizedPhone,
         eventDate: eventDate,
         messageContent: content,
         userId,
       },
     })
+
+    console.log('[Lembrete] Confirmação criada:', confirmation.id, 'para telefone:', normalizedPhone)
 
     res.status(201).json(reminderMessage)
   } catch (error) {

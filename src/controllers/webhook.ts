@@ -165,6 +165,10 @@ export class WebhookController {
 
     console.log('[WAHA Message] Número normalizado:', phoneNumber);
 
+    // Extrai o userId da sessão para filtrar confirmações
+    const userId = this.extractUserIdFromSession(event.session);
+    console.log('[WAHA Message] UserId extraído:', userId);
+
     // Detecta resposta do contato
     const responseText = message.body?.toLowerCase().trim() || '';
     
@@ -183,6 +187,7 @@ export class WebhookController {
       const confirmations = await prisma.confirmation.findMany({
         where: {
           status: ConfirmationStatus.PENDING,
+          ...(userId && { userId }),
         },
         orderBy: { createdAt: 'desc' },
       });
@@ -192,6 +197,10 @@ export class WebhookController {
         ...c,
         normalizedPhone: c.contactPhone.replace(/\D/g, ''),
       }));
+
+      console.log('[WAHA Confirmation] Confirmations found:', normalizedConfirmations.length);
+      console.log('[WAHA Confirmation] Normalized phone from message:', phoneNumber);
+      console.log('[WAHA Confirmation] All confirmation phones:', normalizedConfirmations.map(c => c.normalizedPhone));
 
       // Busca a confirmação com número correspondente
       const confirmation = normalizedConfirmations.find(c => 
