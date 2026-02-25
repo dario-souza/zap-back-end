@@ -460,73 +460,74 @@ export class WebhookController {
       
       console.log('[WAHA Message ANY] Texto da mensagem:', responseText);
 
-    // Palavras de confirmação
-    const positiveResponses = ['sim', 'yes', 'confirmei', 'vou ir', 'confirmado', 'ok', 'claro', 'com certeza', 'presente', 'vou', 'estou'];
-    const negativeResponses = ['não', 'nao', 'no', 'não vou', 'cancela', 'cancelado', 'não posso', 'vou faltar', 'não irei', 'nao vou', 'nao posso'];
+      // Palavras de confirmação
+      const positiveResponses = ['sim', 'yes', 'confirmei', 'vou ir', 'confirmado', 'ok', 'claro', 'com certeza', 'presente', 'vou', 'estou'];
+      const negativeResponses = ['não', 'nao', 'no', 'não vou', 'cancela', 'cancelado', 'não posso', 'vou faltar', 'não irei', 'nao vou', 'nao posso'];
 
-    const isPositive = positiveResponses.some(word => new RegExp(`\\b${word}\\b`, 'i').test(responseLower));
-    const isNegative = negativeResponses.some(word => new RegExp(`\\b${word}\\b`, 'i').test(responseLower));
+      const isPositive = positiveResponses.some(word => new RegExp(`\\b${word}\\b`, 'i').test(responseLower));
+      const isNegative = negativeResponses.some(word => new RegExp(`\\b${word}\\b`, 'i').test(responseLower));
 
-    // Se detectou resposta de confirmação
-    if ((isPositive || isNegative) && phoneNumber) {
-      console.log(`[WAHA Confirmation ANY] Resposta detectada: "${responseText}" (${isPositive ? 'POSITIVA' : 'NEGATIVA'}) para número: ${phoneNumber}`);
+      // Se detectou resposta de confirmação
+      if ((isPositive || isNegative) && phoneNumber) {
+        console.log(`[WAHA Confirmation ANY] Resposta detectada: "${responseText}" (${isPositive ? 'POSITIVA' : 'NEGATIVA'}) para número: ${phoneNumber}`);
 
-      // Extrai userId da sessão
-      const userId = this.extractUserIdFromSession(event.session);
+        // Extrai userId da sessão
+        const userId = this.extractUserIdFromSession(event.session);
 
-      // Busca confirmações pendentes
-      let confirmations = await prisma.confirmation.findMany({
-        where: {
-          status: ConfirmationStatus.PENDING,
-          userId: userId || undefined,
-        },
-        orderBy: { createdAt: 'desc' },
-      });
-
-      if (confirmations.length === 0) {
-        confirmations = await prisma.confirmation.findMany({
-          where: { status: ConfirmationStatus.PENDING },
-          take: 10,
-        });
-      }
-
-      // Normaliza e busca correspondência
-      const normalizedConfirmations = confirmations.map(c => ({
-        ...c,
-        normalizedPhone: c.contactPhone.replace(/\D/g, ''),
-      }));
-
-      console.log('[WAHA Confirmation ANY] Confirmations found:', normalizedConfirmations.length);
-      console.log('[WAHA Confirmation ANY] Número do WhatsApp:', phoneNumber);
-      console.log('[WAHA Confirmation ANY] Números salvos:', normalizedConfirmations.map(c => c.normalizedPhone));
-
-      // Busca correspondência
-      let confirmation = null;
-      for (const c of normalizedConfirmations) {
-        const savedPhone = c.normalizedPhone;
-        
-        if (savedPhone === phoneNumber || 
-            phoneNumber.endsWith(savedPhone) || 
-            savedPhone.endsWith(phoneNumber) ||
-            savedPhone.slice(-10) === phoneNumber.slice(-10) ||
-            savedPhone.slice(-8) === phoneNumber.slice(-8)) {
-          confirmation = c;
-          break;
-        }
-      }
-
-      if (confirmation) {
-        const newStatus = isPositive ? ConfirmationStatus.CONFIRMED : ConfirmationStatus.DENIED;
-        await prisma.confirmation.update({
-          where: { id: confirmation.id },
-          data: {
-            status: newStatus,
-            response: responseText,
-            respondedAt: new Date(),
+        // Busca confirmações pendentes
+        let confirmations = await prisma.confirmation.findMany({
+          where: {
+            status: ConfirmationStatus.PENDING,
+            userId: userId || undefined,
           },
+          orderBy: { createdAt: 'desc' },
         });
-        console.log(`[WAHA Confirmation ANY] ✅ Confirmação ${confirmation.id} atualizada para ${newStatus}`);
-        return; // Sai após processar a confirmação
+
+        if (confirmations.length === 0) {
+          confirmations = await prisma.confirmation.findMany({
+            where: { status: ConfirmationStatus.PENDING },
+            take: 10,
+          });
+        }
+
+        // Normaliza e busca correspondência
+        const normalizedConfirmations = confirmations.map(c => ({
+          ...c,
+          normalizedPhone: c.contactPhone.replace(/\D/g, ''),
+        }));
+
+        console.log('[WAHA Confirmation ANY] Confirmations found:', normalizedConfirmations.length);
+        console.log('[WAHA Confirmation ANY] Número do WhatsApp:', phoneNumber);
+        console.log('[WAHA Confirmation ANY] Números salvos:', normalizedConfirmations.map(c => c.normalizedPhone));
+
+        // Busca correspondência
+        let confirmation = null;
+        for (const c of normalizedConfirmations) {
+          const savedPhone = c.normalizedPhone;
+          
+          if (savedPhone === phoneNumber || 
+              phoneNumber.endsWith(savedPhone) || 
+              savedPhone.endsWith(phoneNumber) ||
+              savedPhone.slice(-10) === phoneNumber.slice(-10) ||
+              savedPhone.slice(-8) === phoneNumber.slice(-8)) {
+            confirmation = c;
+            break;
+          }
+        }
+
+        if (confirmation) {
+          const newStatus = isPositive ? ConfirmationStatus.CONFIRMED : ConfirmationStatus.DENIED;
+          await prisma.confirmation.update({
+            where: { id: confirmation.id },
+            data: {
+              status: newStatus,
+              response: responseText,
+              respondedAt: new Date(),
+            },
+          });
+          console.log(`[WAHA Confirmation ANY] ✅ Confirmação ${confirmation.id} atualizada para ${newStatus}`);
+          return; // Sai após processar a confirmação
+        }
       }
     } // Fim do else - só processa confirmações para mensagens recebidas
 
