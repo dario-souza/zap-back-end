@@ -18,6 +18,41 @@ const MAX_EVENTS = 100;
 const eventCallbacks: Map<string, ((event: WAHAWebhookEvent) => void)[]> = new Map();
 
 export class WebhookController {
+  // Método auxiliar para extrair texto da mensagem de diferentes formatos
+  private extractMessageText(message: any): string | null {
+    // Formato 1: message.body (texto simples)
+    if (message.body) {
+      return message.body;
+    }
+    
+    // Formato 2: message.extendedTextMessage.text (mensagem com preview)
+    if (message.message?.extendedTextMessage?.text) {
+      return message.message.extendedTextMessage.text;
+    }
+    
+    // Formato 3: message.conversation (mensagem direta)
+    if (message.message?.conversation) {
+      return message.message.conversation;
+    }
+    
+    // Formato 4: message.imageMessage.caption
+    if (message.message?.imageMessage?.caption) {
+      return message.message.imageMessage.caption;
+    }
+    
+    // Formato 5: message.videoMessage.caption
+    if (message.message?.videoMessage?.caption) {
+      return message.message.videoMessage.caption;
+    }
+    
+    // Formato 6: message.documentMessage.caption
+    if (message.message?.documentMessage?.caption) {
+      return message.message.documentMessage.caption;
+    }
+    
+    return null;
+  }
+
   // Receber webhook da WAHA - usando arrow function para manter o contexto do this
   handleWAHAWebhook = async (req: Request, res: Response) => {
     try {
@@ -147,6 +182,10 @@ export class WebhookController {
       timestamp: message.timestamp,
     });
 
+    // Extrai o texto da mensagem - suporta múltiplos formatos
+    const messageText = this.extractMessageText(message);
+    console.log('[WAHA Message] Texto extraído:', messageText);
+
     // Extrai o número do contato - pode vir como @c.us ou @s.whatsapp.net ou @lid
     let phoneNumber = message.from?.replace('@c.us', '').replace('@s.whatsapp.net', '').replace('@lid', '');
     if (!phoneNumber) {
@@ -171,7 +210,7 @@ export class WebhookController {
     console.log('[WAHA Message] UserId extraído:', userId);
 
     // Detecta resposta do contato
-    const responseText = message.body?.toLowerCase().trim() || '';
+    const responseText = messageText?.toLowerCase().trim() || '';
     
     console.log('[WAHA Confirmation] ===== DEBUG =====');
     console.log('[WAHA Confirmation] sessionName:', event.session);
@@ -383,76 +422,163 @@ export class WebhookController {
   private async handleMessageAny(event: WAHAWebhookEvent) {
     const payload = event.payload;
     
-    // Só processa mensagens enviadas por nós (fromMe = true)
-    if (!payload.fromMe) {
-      return;
-    }
-
     console.log('[WAHA Message ANY] ====================================');
     console.log('[WAHA Message ANY] Payload:', JSON.stringify(payload, null, 2));
     console.log('[WAHA Message ANY] ID:', payload.id);
+    console.log('[WAHA Message ANY] fromMe:', payload.fromMe);
     console.log('[WAHA Message ANY] ACK:', payload.ack, '| ACK Name:', payload.ackName);
     console.log('[WAHA Message ANY] ====================================');
 
-    // Processa o campo ack se existir
-    if (payload.ack !== undefined) {
-      // Extrai o ID real da mensagem - pode vir como "true_5511...@c.us_3EB0..." ou direto "3EB0..."
-      const rawMessageId = payload.id;
-      
-      // Verifica se o ID existe
-      if (!rawMessageId) {
-        console.log('[WAHA Message ANY] ID da mensagem não encontrado, ignorando');
-        return;
+    // Extrai o número do remetente/destinatário
+    const from = payload.from || payload.remoteJid || payload.to || '';
+    let phoneNumber = from?.replace('@c.us', '').replace('@s.whatsapp.net', '').replace('@lid', '').replace('@g.us', '');
+    if (phoneNumber) {
+      phoneNumber = phoneNumber.replace(/\D/g, '');
+      if (phoneNumber.length >= 10 && !phoneNumber.startsWith('55')) {
+        phoneNumber = '55' + phoneNumber;
       }
-      
-      const messageId = rawMessageId.includes('_') 
-        ? rawMessageId.split('_').pop()  // Pega a última parte após os underscores
-        : rawMessageId;
-      
-      const ack = payload.ack;
-      
-      try {
-        let newStatus: MessageStatus | null = null;
-        let updateData: any = {};
+    }
+    
+    console.log('[WAHA Message ANY] Número extraído:', phoneNumber);
 
-        // Converte ack para número
-        const ackNum = parseInt(ack);
-        
-        switch (ackNum) {
-          case 1:
-            newStatus = MessageStatus.SENT;
-            updateData = { status: newStatus, sentAt: new Date() };
-            break;
-          case 2:
-            newStatus = MessageStatus.DELIVERED;
-            updateData = { status: newStatus, deliveredAt: new Date() };
-            break;
-          case 3:
-            newStatus = MessageStatus.READ;
-            updateData = { status: newStatus, readAt: new Date() };
-            break;
-          default:
-            console.log(`[WAHA Message ANY] Ack não mapeado: ${ack}`);
-            return;
-        }
+    // Detecta resposta de confirmação (para qualquer mensagem)
+    const responseText = payload.message?.extendedTextMessage?.text || payload.body || '';
+    const responseLower = responseText.toLowerCase().trim();
+    
+    console.log('[WAHA Message ANY] Texto da mensagem:', responseText);
 
-        console.log(`[WAHA Message ANY] Buscando mensagem com externalId: "${messageId}"`);
-        
-        const message = await prisma.message.findFirst({
-          where: { externalId: messageId }
+    // Palavras de confirmação
+    const positiveResponses = ['sim', 'yes', 'confirmei', 'vou ir', 'confirmado', 'ok', 'claro', 'com certeza', 'presente', 'vou', 'estou'];
+    const negativeResponses = ['não', 'nao', 'no', 'não vou', 'cancela', 'cancelado', 'não posso', 'vou faltar', 'não irei', 'nao vou', 'nao posso'];
+
+    const isPositive = positiveResponses.some(word => new RegExp(`\\b${word}\\b`, 'i').test(responseLower));
+    const isNegative = negativeResponses.some(word => new RegExp(`\\b${word}\\b`, 'i').test(responseLower));
+
+    // Se detectou resposta de confirmação
+    if ((isPositive || isNegative) && phoneNumber) {
+      console.log(`[WAHA Confirmation ANY] Resposta detectada: "${responseText}" (${isPositive ? 'POSITIVA' : 'NEGATIVA'}) para número: ${phoneNumber}`);
+
+      // Extrai userId da sessão
+      const userId = this.extractUserIdFromSession(event.session);
+
+      // Busca confirmações pendentes
+      let confirmations = await prisma.confirmation.findMany({
+        where: {
+          status: ConfirmationStatus.PENDING,
+          userId: userId || undefined,
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (confirmations.length === 0) {
+        confirmations = await prisma.confirmation.findMany({
+          where: { status: ConfirmationStatus.PENDING },
+          take: 10,
         });
+      }
 
-        if (message) {
-          await prisma.message.update({
-            where: { id: message.id },
-            data: updateData
-          });
-          console.log(`[WAHA Message ANY] ✅ Mensagem ${messageId} atualizada para ${newStatus}`);
-        } else {
-          console.log(`[WAHA Message ANY] ❌ Mensagem ${messageId} não encontrada`);
+      // Normaliza e busca correspondência
+      const normalizedConfirmations = confirmations.map(c => ({
+        ...c,
+        normalizedPhone: c.contactPhone.replace(/\D/g, ''),
+      }));
+
+      console.log('[WAHA Confirmation ANY] Confirmations found:', normalizedConfirmations.length);
+      console.log('[WAHA Confirmation ANY] Número do WhatsApp:', phoneNumber);
+      console.log('[WAHA Confirmation ANY] Números salvos:', normalizedConfirmations.map(c => c.normalizedPhone));
+
+      // Busca correspondência
+      let confirmation = null;
+      for (const c of normalizedConfirmations) {
+        const savedPhone = c.normalizedPhone;
+        
+        if (savedPhone === phoneNumber || 
+            phoneNumber.endsWith(savedPhone) || 
+            savedPhone.endsWith(phoneNumber) ||
+            savedPhone.slice(-10) === phoneNumber.slice(-10) ||
+            savedPhone.slice(-8) === phoneNumber.slice(-8)) {
+          confirmation = c;
+          break;
         }
-      } catch (error) {
-        console.error('[WAHA Message ANY] ❌ Erro:', error);
+      }
+
+      if (confirmation) {
+        const newStatus = isPositive ? ConfirmationStatus.CONFIRMED : ConfirmationStatus.DENIED;
+        await prisma.confirmation.update({
+          where: { id: confirmation.id },
+          data: {
+            status: newStatus,
+            response: responseText,
+            respondedAt: new Date(),
+          },
+        });
+        console.log(`[WAHA Confirmation ANY] ✅ Confirmação ${confirmation.id} atualizada para ${newStatus}`);
+        return; // Sai após processar a confirmação
+      }
+    }
+
+    // Processa ACK (status de entrega) APENAS para mensagens enviadas por nós
+    if (payload.fromMe) {
+      // Processa o campo ack se existir
+      if (payload.ack !== undefined) {
+        // Extrai o ID real da mensagem - pode vir como "true_5511...@c.us_3EB0..." ou direto "3EB0..."
+        const rawMessageId = payload.id;
+        
+        // Verifica se o ID existe
+        if (!rawMessageId) {
+          console.log('[WAHA Message ANY] ID da mensagem não encontrado, ignorando');
+          return;
+        }
+        
+        const messageId = rawMessageId.includes('_') 
+          ? rawMessageId.split('_').pop()  // Pega a última parte após os underscores
+          : rawMessageId;
+        
+        const ack = payload.ack;
+        
+        try {
+          let newStatus: MessageStatus | null = null;
+          let updateData: any = {};
+
+          // Converte ack para número
+          const ackNum = parseInt(ack);
+          
+          switch (ackNum) {
+            case 1:
+              newStatus = MessageStatus.SENT;
+              updateData = { status: newStatus, sentAt: new Date() };
+              break;
+            case 2:
+              newStatus = MessageStatus.DELIVERED;
+              updateData = { status: newStatus, deliveredAt: new Date() };
+              break;
+            case 3:
+              newStatus = MessageStatus.READ;
+              updateData = { status: newStatus, readAt: new Date() };
+              break;
+            default:
+              console.log(`[WAHA Message ANY] Ack não mapeado: ${ack}`);
+              return;
+          }
+
+          console.log(`[WAHA Message ANY] Buscando mensagem com externalId: "${messageId}"`);
+          
+          const message = await prisma.message.findFirst({
+            where: { externalId: messageId }
+          });
+
+          if (message) {
+            await prisma.message.update({
+              where: { id: message.id },
+              data: updateData
+            });
+            console.log(`[WAHA Message ANY] ✅ Mensagem ${messageId} atualizada para ${newStatus}`);
+          } else {
+            console.log(`[WAHA Message ANY] ❌ Mensagem ${messageId} não encontrada`);
+          }
+        } catch (error) {
+          console.error('[WAHA Message ANY] ❌ Erro:', error);
+        }
       }
     }
   }
