@@ -507,6 +507,40 @@ export class WAHAService {
   }
 
   /**
+   * Configura webhook em uma sessão existente
+   */
+  async configureWebhook(sessionName: string, webhookUrl: string): Promise<any> {
+    if (!this.isConfigured()) {
+      throw new Error('WAHA API não configurada');
+    }
+
+    console.log(`[WAHA] Configurando webhook ${webhookUrl} na sessão ${sessionName}...`);
+
+    const config = {
+      config: {
+        webhooks: [
+          {
+            url: webhookUrl,
+            events: ['session.status', 'message', 'message.any', 'message.ack'],
+          },
+        ],
+      },
+    };
+
+    try {
+      const result = await this.fetch(`/api/sessions/${sessionName}`, {
+        method: 'PUT',
+        body: JSON.stringify(config),
+      });
+      console.log('[WAHA] Webhook configurado com sucesso:', result);
+      return result;
+    } catch (error: any) {
+      console.error('[WAHA] Erro ao configurar webhook:', error.message);
+      throw error;
+    }
+  }
+
+  /**
    * Gera um nome único de sessão baseado no ID do usuário
    */
   generateSessionName(userId: string): string {

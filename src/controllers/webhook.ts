@@ -147,8 +147,8 @@ export class WebhookController {
       timestamp: message.timestamp,
     });
 
-    // Extrai o número do contato (remove @c.us ou @lid)
-    let phoneNumber = message.from?.replace('@c.us', '').replace('@lid', '');
+    // Extrai o número do contato - pode vir como @c.us ou @s.whatsapp.net ou @lid
+    let phoneNumber = message.from?.replace('@c.us', '').replace('@s.whatsapp.net', '').replace('@lid', '');
     if (!phoneNumber) {
       console.log('[WAHA Message] Número do remetente não encontrado');
       return;
@@ -157,8 +157,9 @@ export class WebhookController {
     // Normaliza o número: remove tudo que não é dígito
     phoneNumber = phoneNumber.replace(/\D/g, '');
     
+    console.log('[WAHA Message] Número original do WhatsApp:', phoneNumber);
+
     // Se o número tem 10 ou 11 dígitos e não começa com 55, adiciona o DDI 55
-    // Isso trata números brasileiros que podem chegar sem DDI
     if (phoneNumber.length >= 10 && !phoneNumber.startsWith('55')) {
       phoneNumber = '55' + phoneNumber;
     }
@@ -169,63 +170,109 @@ export class WebhookController {
     const userId = this.extractUserIdFromSession(event.session);
     console.log('[WAHA Message] UserId extraído:', userId);
 
-      // Detecta resposta do contato
-      const responseText = message.body?.toLowerCase().trim() || '';
-      
-      console.log('[WAHA Confirmation] ===== DEBUG =====');
-      console.log('[WAHA Confirmation] sessionName:', event.session);
-      console.log('[WAHA Confirmation] userId extraído:', userId);
-      console.log('[WAHA Confirmation] phoneNumber:', phoneNumber);
+    // Detecta resposta do contato
+    const responseText = message.body?.toLowerCase().trim() || '';
+    
+    console.log('[WAHA Confirmation] ===== DEBUG =====');
+    console.log('[WAHA Confirmation] sessionName:', event.session);
+    console.log('[WAHA Confirmation] userId extraído:', userId);
+    console.log('[WAHA Confirmation] phoneNumber (WhatsApp):', phoneNumber);
+    console.log('[WAHA Confirmation] responseText:', responseText);
 
-      // Palavras que indicam confirmação positiva
-    const positiveResponses = ['sim', 'yes', 'confirmei', 'vou ir', 'confirmado', 'ok', 'claro', 'com certeza', 'presente'];
+    // Palavras que indicam confirmação positiva
+    const positiveResponses = ['sim', 'yes', 'confirmei', 'vou ir', 'confirmado', 'ok', 'claro', 'com certeza', 'presente', 'vou', 'estou'];
     // Palavras que indicam confirmação negativa
-    const negativeResponses = ['não', 'nao', 'no', 'não vou', 'cancela', 'cancelado', 'não posso', 'vou faltar', 'não irei'];
+    const negativeResponses = ['não', 'nao', 'no', 'não vou', 'cancela', 'cancelado', 'não posso', 'vou faltar', 'não irei', 'nao vou', 'nao posso'];
 
-    const isPositive = positiveResponses.some(word => responseText.includes(word));
-    const isNegative = negativeResponses.some(word => responseText.includes(word));
+    // Detectar apenas respostas explícitas
+    const isPositive = positiveResponses.some(word => {
+      const regex = new RegExp(`\\b${word}\\b`, 'i');
+      return regex.test(responseText);
+    });
+    const isNegative = negativeResponses.some(word => {
+      const regex = new RegExp(`\\b${word}\\b`, 'i');
+      return regex.test(responseText);
+    });
 
     if (isPositive || isNegative) {
-      console.log(`[WAHA Confirmation] Resposta detectada: ${responseText} (${isPositive ? 'POSITIVA' : 'NEGATIVA'}) para o número: ${phoneNumber}`);
+      console.log(`[WAHA Confirmation] Resposta detectada: "${responseText}" (${isPositive ? 'POSITIVA' : 'NEGATIVA'})`);
 
       // Busca todas as confirmações pendentes do usuário
-      // Primeiro tenta com o userId extraído da sessão
-      let confirmations;
-      try {
-        confirmations = await prisma.confirmation.findMany({
-          where: {
-            status: ConfirmationStatus.PENDING,
-            userId: userId || undefined,
-          },
-          orderBy: { createdAt: 'desc' },
-        });
-      } catch (error) {
-        console.log('[WAHA Confirmation] Erro na query com userId:', error);
-        // Tenta buscar todas as confirmações pendentes sem filtro de userId
+      let confirmations = await prisma.confirmation.findMany({
+        where: {
+          status: ConfirmationStatus.PENDING,
+          userId: userId || undefined,
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (confirmations.length === 0) {
+        console.log('[WAHA Confirmation] Nenhuma confirmação PENDING encontrada');
+        // Tenta buscar sem filtro de userId para debug
         confirmations = await prisma.confirmation.findMany({
           where: {
             status: ConfirmationStatus.PENDING,
           },
-          orderBy: { createdAt: 'desc' },
+          take: 10,
         });
+        console.log('[WAHA Confirmation] Total de confirmações PENDING (sem filtro):', confirmations.length);
       }
 
-      // Normaliza o número de cada confirmação para comparar
+      // Normaliza os números das confirmações para comparação
       const normalizedConfirmations = confirmations.map(c => ({
         ...c,
         normalizedPhone: c.contactPhone.replace(/\D/g, ''),
       }));
 
       console.log('[WAHA Confirmation] Confirmations found:', normalizedConfirmations.length);
-      console.log('[WAHA Confirmation] Normalized phone from message:', phoneNumber);
-      console.log('[WAHA Confirmation] All confirmation phones:', normalizedConfirmations.map(c => c.normalizedPhone));
+      console.log('[WAHA Confirmation] Número do WhatsApp:', phoneNumber);
+      console.log('[WAHA Confirmation] Números salvos:', normalizedConfirmations.map(c => c.normalizedPhone));
 
-      // Busca a confirmação com número correspondente
-      const confirmation = normalizedConfirmations.find(c => 
-        c.normalizedPhone === phoneNumber || 
-        phoneNumber.endsWith(c.normalizedPhone) ||
-        c.normalizedPhone.endsWith(phoneNumber)
-      );
+      // BUSCA INTELIGENTE: tenta várias estratégias de correspondência
+      let confirmation = null;
+      
+      for (const c of normalizedConfirmations) {
+        const savedPhone = c.normalizedPhone;
+        
+        // Estratégia 1: correspondência exata
+        if (savedPhone === phoneNumber) {
+          console.log(`[WAHA Confirmation] ✅ Correspondência exata: ${savedPhone} === ${phoneNumber}`);
+          confirmation = c;
+          break;
+        }
+        
+        // Estratégia 2: o número do WhatsApp termina com o número salvo (últimos dígitos)
+        if (phoneNumber.endsWith(savedPhone) && savedPhone.length >= 8) {
+          console.log(`[WAHA Confirmation] ✅ Correspondência por finais: ${phoneNumber} termina com ${savedPhone}`);
+          confirmation = c;
+          break;
+        }
+        
+        // Estratégia 3: o número salvo termina com o número do WhatsApp
+        if (savedPhone.endsWith(phoneNumber) && phoneNumber.length >= 8) {
+          console.log(`[WAHA Confirmation] ✅ Correspondência por finais (inverso): ${savedPhone} termina com ${phoneNumber}`);
+          confirmation = c;
+          break;
+        }
+
+        // Estratégia 4: comparação dos últimos 10 dígitos
+        const last10Saved = savedPhone.slice(-10);
+        const last10WhatsApp = phoneNumber.slice(-10);
+        if (last10Saved === last10WhatsApp) {
+          console.log(`[WAHA Confirmation] ✅ Correspondência últimos 10 dígitos: ${last10Saved} === ${last10WhatsApp}`);
+          confirmation = c;
+          break;
+        }
+
+        // Estratégia 5: comparação dos últimos 8 dígitos
+        const last8Saved = savedPhone.slice(-8);
+        const last8WhatsApp = phoneNumber.slice(-8);
+        if (last8Saved === last8WhatsApp) {
+          console.log(`[WAHA Confirmation] ✅ Correspondência últimos 8 dígitos: ${last8Saved} === ${last8WhatsApp}`);
+          confirmation = c;
+          break;
+        }
+      }
 
       if (confirmation) {
         const newStatus = isPositive ? ConfirmationStatus.CONFIRMED : ConfirmationStatus.DENIED;
@@ -237,9 +284,10 @@ export class WebhookController {
             respondedAt: new Date(),
           },
         });
-        console.log(`[WAHA Confirmation] ✅ Confirmação ${confirmation.id} atualizada para ${newStatus}`);
+        console.log(`[WAHA Confirmation] ✅ Confirmação ${confirmation.id} atualizada para ${newStatus} (${confirmation.contactName})`);
       } else {
-        console.log(`[WAHA Confirmation] Nenhuma confirmação pendente encontrada para ${phoneNumber}`);
+        console.log(`[WAHA Confirmation] ❌ Nenhuma confirmação encontrada para ${phoneNumber}`);
+        console.log('[WAHA Confirmation] Tentou corresponder com:', normalizedConfirmations.map(c => c.normalizedPhone));
       }
     }
   }
