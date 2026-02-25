@@ -216,27 +216,15 @@ export class WebhookController {
         normalizedPhone: c.contactPhone.replace(/\D/g, ''),
       }));
 
-console.log('[WAHA Confirmation] Confirmations found:', normalizedConfirmations.length);
+      console.log('[WAHA Confirmation] Confirmations found:', normalizedConfirmations.length);
       console.log('[WAHA Confirmation] Normalized phone from message:', phoneNumber);
       console.log('[WAHA Confirmation] All confirmation phones:', normalizedConfirmations.map(c => c.normalizedPhone));
 
-      // Extrai também o número do destinatário (to) - a pessoa que recebeu a mensagem
-      let toNumber = message.to?.replace('@c.us', '').replace('@lid', '');
-      if (toNumber) {
-        toNumber = toNumber.replace(/\D/g, '');
-        if (toNumber.length >= 10 && !toNumber.startsWith('55')) {
-          toNumber = '55' + toNumber;
-        }
-        console.log('[WAHA Confirmation] Normalized to number:', toNumber);
-      }
-
-      // Busca a confirmação com número correspondente (pode ser o remetente OU o destinatário)
+      // Busca a confirmação com número correspondente
       const confirmation = normalizedConfirmations.find(c => 
         c.normalizedPhone === phoneNumber || 
         phoneNumber.endsWith(c.normalizedPhone) ||
-        c.normalizedPhone.endsWith(phoneNumber) ||
-        // Também verifica contra o número do destinatário
-        (toNumber && (c.normalizedPhone === toNumber || toNumber.endsWith(c.normalizedPhone) || c.normalizedPhone.endsWith(toNumber)))
+        c.normalizedPhone.endsWith(phoneNumber)
       );
 
       if (confirmation) {
@@ -343,111 +331,20 @@ console.log('[WAHA Confirmation] Confirmations found:', normalizedConfirmations.
     }
   }
 
-// Handler para message.any (NOWEB usa isso em vez de message.ack)
+  // Handler para message.any (NOWEB usa isso em vez de message.ack)
   private async handleMessageAny(event: WAHAWebhookEvent) {
     const payload = event.payload;
     
     // Só processa mensagens enviadas por nós (fromMe = true)
-    // ou mensagens recebidas de outros (fromMe = false)
-    
+    if (!payload.fromMe) {
+      return;
+    }
+
     console.log('[WAHA Message ANY] ====================================');
     console.log('[WAHA Message ANY] Payload:', JSON.stringify(payload, null, 2));
-    console.log('[WAHA Message ANY] fromMe:', payload.fromMe);
-    console.log('[WAHA Message ANY] body:', payload.body);
+    console.log('[WAHA Message ANY] ID:', payload.id);
+    console.log('[WAHA Message ANY] ACK:', payload.ack, '| ACK Name:', payload.ackName);
     console.log('[WAHA Message ANY] ====================================');
-
-    // Se é uma mensagem do próprio usuário (fromMe: true), verifica se é resposta de confirmação
-    if (payload.fromMe) {
-      // Extrai o número do contato que enviou a mensagem
-      let phoneNumber = payload.from?.replace('@c.us', '').replace('@lid', '');
-      if (!phoneNumber) {
-        // Se não tiver 'from', usa o ID da sessão para obter o número próprio
-        const userId = this.extractUserIdFromSession(event.session);
-        if (userId) {
-          const session = await prisma.whatsAppSession.findFirst({ where: { userId } });
-          phoneNumber = session?.phoneNumber;
-        }
-      }
-      
-      if (phoneNumber) {
-        phoneNumber = phoneNumber.replace(/\D/g, '');
-        if (phoneNumber.length >= 10 && !phoneNumber.startsWith('55')) {
-          phoneNumber = '55' + phoneNumber;
-        }
-        
-        console.log('[WAHA Confirmation ANY] Número do usuário:', phoneNumber);
-        console.log('[WAHA Confirmation ANY] Mensagem:', payload.body);
-        
-        // Detecta resposta do usuário
-        const responseText = payload.body?.toLowerCase().trim() || '';
-        const positiveResponses = ['sim', 'yes', 'confirmei', 'vou ir', 'confirmado', 'ok', 'claro', 'com certeza', 'presente'];
-        const negativeResponses = ['não', 'nao', 'no', 'não vou', 'cancela', 'cancelado', 'não posso', 'vou faltar', 'não irei'];
-        
-        const isPositive = positiveResponses.some(word => responseText.includes(word));
-        const isNegative = negativeResponses.some(word => responseText.includes(word));
-        
-        if (isPositive || isNegative) {
-          console.log(`[WAHA Confirmation ANY] Resposta detectada: ${responseText} (${isPositive ? 'POSITIVA' : 'NEGATIVA'}) para o número: ${phoneNumber}`);
-          
-          const userId = this.extractUserIdFromSession(event.session);
-          
-          // Busca todas as confirmações pendentes do usuário
-          let confirmations;
-          try {
-            confirmations = await prisma.confirmation.findMany({
-              where: {
-                status: ConfirmationStatus.PENDING,
-                userId: userId || undefined,
-              },
-              orderBy: { createdAt: 'desc' },
-            });
-          } catch (error) {
-            console.log('[WAHA Confirmation ANY] Erro na query com userId:', error);
-            confirmations = await prisma.confirmation.findMany({
-              where: {
-                status: ConfirmationStatus.PENDING,
-              },
-              orderBy: { createdAt: 'desc' },
-            });
-          }
-          
-          // Normaliza o número de cada confirmação para comparar
-          const normalizedConfirmations = confirmations.map(c => ({
-            ...c,
-            normalizedPhone: c.contactPhone.replace(/\D/g, ''),
-          }));
-          
-          console.log('[WAHA Confirmation ANY] Confirmations found:', normalizedConfirmations.length);
-          console.log('[WAHA Confirmation ANY] All confirmation phones:', normalizedConfirmations.map(c => c.normalizedPhone));
-          
-          // Busca a confirmação com número correspondente
-          const confirmation = normalizedConfirmations.find(c => 
-            c.normalizedPhone === phoneNumber || 
-            phoneNumber.endsWith(c.normalizedPhone) ||
-            c.normalizedPhone.endsWith(phoneNumber)
-          );
-          
-          if (confirmation) {
-            const newStatus = isPositive ? ConfirmationStatus.CONFIRMED : ConfirmationStatus.DENIED;
-            console.log(`[WAHA Confirmation ANY] Atualizando confirmação ${confirmation.id} para ${newStatus}`);
-            
-            await prisma.confirmation.update({
-              where: { id: confirmation.id },
-              data: {
-                status: newStatus,
-                response: responseText,
-                respondedAt: new Date(),
-              },
-            });
-            
-            console.log(`[WAHA Confirmation ANY] ✅ Confirmação ${confirmation.id} atualizada para ${newStatus}`);
-            return;
-          } else {
-            console.log('[WAHA Confirmation ANY] Nenhuma confirmação pendente encontrada para', phoneNumber);
-          }
-        }
-      }
-    }
 
     // Processa o campo ack se existir
     if (payload.ack !== undefined) {
