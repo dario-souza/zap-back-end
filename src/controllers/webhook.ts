@@ -177,10 +177,17 @@ export class WebhookController {
     const message = event.payload;
     console.log('[WAHA Message] Mensagem recebida:', {
       from: message.from,
+      fromMe: message.fromMe,
       type: message.type,
       body: message.body,
       timestamp: message.timestamp,
     });
+
+    // IGNORA mensagens enviadas por nós mesmos (fromMe: true)
+    if (message.fromMe === true) {
+      console.log('[WAHA Message] Mensagem enviada por nós mesmos, ignorando para confirmação');
+      return;
+    }
 
     // Extrai o texto da mensagem - suporta múltiplos formatos
     const messageText = this.extractMessageText(message);
@@ -441,11 +448,17 @@ export class WebhookController {
     
     console.log('[WAHA Message ANY] Número extraído:', phoneNumber);
 
-    // Detecta resposta de confirmação (para qualquer mensagem)
-    const responseText = this.extractMessageText(payload) || '';
-    const responseLower = responseText.toLowerCase().trim();
-    
-    console.log('[WAHA Message ANY] Texto da mensagem:', responseText);
+    // IGNORA mensagens enviadas por nós mesmos (fromMe: true)
+    // Confirmações só devem ser processadas para mensagens RECEBDAS
+    if (payload.fromMe === true) {
+      console.log('[WAHA Message ANY] Mensagem enviada por nós mesmos, ignorando para confirmação');
+      // Continua apenas para processar ACK (status de entrega)
+    } else {
+      // Detecta resposta de confirmação APENAS para mensagens recebidas
+      const responseText = this.extractMessageText(payload) || '';
+      const responseLower = responseText.toLowerCase().trim();
+      
+      console.log('[WAHA Message ANY] Texto da mensagem:', responseText);
 
     // Palavras de confirmação
     const positiveResponses = ['sim', 'yes', 'confirmei', 'vou ir', 'confirmado', 'ok', 'claro', 'com certeza', 'presente', 'vou', 'estou'];
@@ -515,7 +528,7 @@ export class WebhookController {
         console.log(`[WAHA Confirmation ANY] ✅ Confirmação ${confirmation.id} atualizada para ${newStatus}`);
         return; // Sai após processar a confirmação
       }
-    }
+    } // Fim do else - só processa confirmações para mensagens recebidas
 
     // Processa ACK (status de entrega) APENAS para mensagens enviadas por nós
     if (payload.fromMe) {
