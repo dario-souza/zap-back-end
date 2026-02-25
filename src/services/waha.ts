@@ -185,7 +185,7 @@ export class WAHAService {
       config.config.webhooks = [
         {
           url: this.webhookUrl,
-          events: ['session.status', 'message', 'message.ack'],
+          events: ['session.status', 'message', 'message.any', 'message.ack'],
         },
       ];
     }

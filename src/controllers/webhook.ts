@@ -442,7 +442,7 @@ export class WebhookController {
     console.log('[WAHA Message ANY] Número extraído:', phoneNumber);
 
     // Detecta resposta de confirmação (para qualquer mensagem)
-    const responseText = payload.message?.extendedTextMessage?.text || payload.body || '';
+    const responseText = this.extractMessageText(payload) || '';
     const responseLower = responseText.toLowerCase().trim();
     
     console.log('[WAHA Message ANY] Texto da mensagem:', responseText);
