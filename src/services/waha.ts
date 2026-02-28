@@ -185,7 +185,7 @@ export class WAHAService {
       config.config.webhooks = [
         {
           url: this.webhookUrl,
-          events: ['session.status', 'message', 'message.ack'],
+          events: ['session.status', 'message', 'message.any', 'message.ack'],
         },
       ];
     }
@@ -553,6 +553,37 @@ export class WAHAService {
 
   getSwaggerUrl(): string {
     return `${this.baseUrl}/swagger`;
+  }
+
+  /**
+   * Resolve um LID para número de telefone
+   */
+  async resolveLidToPhone(sessionName: string, lid: string): Promise<string | null> {
+    if (!this.isConfigured()) {
+      console.log('[WAHA] API não configurada para resolver LID');
+      return null;
+    }
+
+    try {
+      // Remove @lid se presente
+      const lidClean = lid.replace('@lid', '');
+      console.log(`[WAHA] Tentando resolver LID: ${lidClean}`);
+      
+      const result = await this.fetch(`/api/${sessionName}/lids/${encodeURIComponent(lidClean)}`);
+      
+      console.log('[WAHA] Resultado da resolução de LID:', result);
+      
+      if (result?.pn) {
+        // Remove @c.us ou @s.whatsapp.net
+        const phone = result.pn.replace('@c.us', '').replace('@s.whatsapp.net', '');
+        return phone;
+      }
+      
+      return null;
+    } catch (error: any) {
+      console.log(`[WAHA] Erro ao resolver LID ${lid}:`, error.message);
+      return null;
+    }
   }
 }
 

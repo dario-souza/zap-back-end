@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import { prisma } from '../lib/prisma.ts';
 import { MessageStatus, ConfirmationStatus } from '@prisma/client';
+import { wahaService } from '../services/waha.ts';
 
 // Tipos de eventos da WAHA
 interface WAHAWebhookEvent {
@@ -177,17 +178,53 @@ export class WebhookController {
     const message = event.payload;
     console.log('[WAHA Message] Mensagem recebida:', {
       from: message.from,
+      fromMe: message.fromMe,
       type: message.type,
       body: message.body,
       timestamp: message.timestamp,
     });
+
+    // IGNORA mensagens enviadas por nós mesmos (fromMe: true)
+    if (message.fromMe === true) {
+      console.log('[WAHA Message] Mensagem enviada por nós mesmos, ignorando para confirmação');
+      return;
+    }
 
     // Extrai o texto da mensagem - suporta múltiplos formatos
     const messageText = this.extractMessageText(message);
     console.log('[WAHA Message] Texto extraído:', messageText);
 
     // Extrai o número do contato - pode vir como @c.us ou @s.whatsapp.net ou @lid
-    let phoneNumber = message.from?.replace('@c.us', '').replace('@s.whatsapp.net', '').replace('@lid', '');
+    // Tenta usar remoteJidAlt se disponível (número real do WhatsApp)
+    const remoteJidAlt = message._data?.key?.remoteJidAlt || message.remoteJidAlt;
+    const participant = message._data?.participant || message.participant;
+    console.log('[WAHA Message] remoteJidAlt:', remoteJidAlt);
+    console.log('[WAHA Message] participant:', participant);
+    console.log('[WAHA Message] from completo:', message.from);
+    
+    // Prioridades: remoteJidAlt > participant > from
+    let fromToUse = remoteJidAlt || participant || message.from;
+    
+    // Se for LID, tenta resolver usando a API do WAHA
+    if (fromToUse?.includes('@lid')) {
+      console.log('[WAHA Message] Número é LID, tentando resolver...');
+      const resolvedPhone = await wahaService.resolveLidToPhone(event.session, fromToUse);
+      if (resolvedPhone) {
+        console.log('[WAHA Message] LID resolvido para:', resolvedPhone);
+        fromToUse = resolvedPhone;
+      } else {
+        // Fallback: tenta extrair de outras fontes
+        const altNumber = message._data?.key?.remoteJidAlt || 
+                         message._data?.key?.id || 
+                         message.id;
+        if (altNumber && !altNumber.includes('@lid')) {
+          console.log('[WAHA Message] Usando número alternativo:', altNumber);
+          fromToUse = altNumber;
+        }
+      }
+    }
+    
+    let phoneNumber = fromToUse?.replace('@c.us', '').replace('@s.whatsapp.net', '').replace('@lid', '').replace('@g.us', '');
     if (!phoneNumber) {
       console.log('[WAHA Message] Número do remetente não encontrado');
       return;
@@ -267,6 +304,23 @@ export class WebhookController {
       console.log('[WAHA Confirmation] Número do WhatsApp:', phoneNumber);
       console.log('[WAHA Confirmation] Números salvos:', normalizedConfirmations.map(c => c.normalizedPhone));
 
+      // Se só há 1 confirmação pendente, atualiza diretamente (sem correspondência de número)
+      // Isso resolve casos onde o LID não corresponde ao número salvo
+      if (normalizedConfirmations.length === 1 && (isPositive || isNegative)) {
+        const c = normalizedConfirmations[0];
+        const newStatus = isPositive ? ConfirmationStatus.CONFIRMED : ConfirmationStatus.DENIED;
+        await prisma.confirmation.update({
+          where: { id: c.id },
+          data: {
+            status: newStatus,
+            response: responseText,
+            respondedAt: new Date(),
+          },
+        });
+        console.log(`[WAHA Confirmation] ✅ Confirmação única atualizada para ${newStatus} (ID: ${c.id})`);
+        return;
+      }
+
       // BUSCA INTELIGENTE: tenta várias estratégias de correspondência
       let confirmation = null;
       
@@ -308,6 +362,24 @@ export class WebhookController {
         const last8WhatsApp = phoneNumber.slice(-8);
         if (last8Saved === last8WhatsApp) {
           console.log(`[WAHA Confirmation] ✅ Correspondência últimos 8 dígitos: ${last8Saved} === ${last8WhatsApp}`);
+          confirmation = c;
+          break;
+        }
+
+        // Estratégia 6: remover DDI e comparar (sem o 55 do Brasil)
+        const phoneWithoutDDI = phoneNumber.replace(/^55/, '');
+        const savedWithoutDDI = savedPhone.replace(/^55/, '');
+        if (phoneWithoutDDI === savedWithoutDDI) {
+          console.log(`[WAHA Confirmation] ✅ Correspondência sem DDI: ${phoneWithoutDDI} === ${savedWithoutDDI}`);
+          confirmation = c;
+          break;
+        }
+
+        // Estratégia 7: comparar sem DDI usando últimos dígitos
+        const last10WithoutDDI = phoneWithoutDDI.slice(-10);
+        const last10SavedWithoutDDI = savedWithoutDDI.slice(-10);
+        if (last10WithoutDDI === last10SavedWithoutDDI && last10WithoutDDI.length >= 8) {
+          console.log(`[WAHA Confirmation] ✅ Correspondência últimos 10 sem DDI: ${last10WithoutDDI} === ${last10SavedWithoutDDI}`);
           confirmation = c;
           break;
         }
@@ -431,7 +503,36 @@ export class WebhookController {
 
     // Extrai o número do remetente/destinatário
     const from = payload.from || payload.remoteJid || payload.to || '';
-    let phoneNumber = from?.replace('@c.us', '').replace('@s.whatsapp.net', '').replace('@lid', '').replace('@g.us', '');
+    // Tenta usar remoteJidAlt se disponível (número real do WhatsApp)
+    const remoteJidAlt = payload._data?.key?.remoteJidAlt || payload.remoteJidAlt;
+    const participant = payload._data?.participant || payload.participant;
+    console.log('[WAHA Message ANY] remoteJidAlt:', remoteJidAlt);
+    console.log('[WAHA Message ANY] participant:', participant);
+    console.log('[WAHA Message ANY] from completo:', from);
+    
+    // Prioridades: remoteJidAlt > participant > from
+    let fromToUse = remoteJidAlt || participant || from;
+    
+    // Se for LID, tenta resolver usando a API do WAHA
+    if (fromToUse?.includes('@lid')) {
+      console.log('[WAHA Message ANY] Número é LID, tentando resolver...');
+      const resolvedPhone = await wahaService.resolveLidToPhone(event.session, fromToUse);
+      if (resolvedPhone) {
+        console.log('[WAHA Message ANY] LID resolvido para:', resolvedPhone);
+        fromToUse = resolvedPhone;
+      } else {
+        // Fallback: tenta extrair de outras fontes
+        const altNumber = payload._data?.key?.remoteJidAlt || 
+                         payload._data?.key?.id || 
+                         payload.id;
+        if (altNumber && !altNumber.includes('@lid')) {
+          console.log('[WAHA Message ANY] Usando número alternativo:', altNumber);
+          fromToUse = altNumber;
+        }
+      }
+    }
+    
+    let phoneNumber = fromToUse?.replace('@c.us', '').replace('@s.whatsapp.net', '').replace('@lid', '').replace('@g.us', '');
     if (phoneNumber) {
       phoneNumber = phoneNumber.replace(/\D/g, '');
       if (phoneNumber.length >= 10 && !phoneNumber.startsWith('55')) {
@@ -441,81 +542,122 @@ export class WebhookController {
     
     console.log('[WAHA Message ANY] Número extraído:', phoneNumber);
 
-    // Detecta resposta de confirmação (para qualquer mensagem)
-    const responseText = payload.message?.extendedTextMessage?.text || payload.body || '';
-    const responseLower = responseText.toLowerCase().trim();
-    
-    console.log('[WAHA Message ANY] Texto da mensagem:', responseText);
+    // IGNORA mensagens enviadas por nós mesmos (fromMe: true)
+    // Confirmações só devem ser processadas para mensagens RECEBDAS
+    if (payload.fromMe === true) {
+      console.log('[WAHA Message ANY] Mensagem enviada por nós mesmos, ignorando para confirmação');
+      // Continua apenas para processar ACK (status de entrega)
+    } else {
+      // Detecta resposta de confirmação APENAS para mensagens recebidas
+      const responseText = this.extractMessageText(payload) || '';
+      const responseLower = responseText.toLowerCase().trim();
+      
+      console.log('[WAHA Message ANY] Texto da mensagem:', responseText);
 
-    // Palavras de confirmação
-    const positiveResponses = ['sim', 'yes', 'confirmei', 'vou ir', 'confirmado', 'ok', 'claro', 'com certeza', 'presente', 'vou', 'estou'];
-    const negativeResponses = ['não', 'nao', 'no', 'não vou', 'cancela', 'cancelado', 'não posso', 'vou faltar', 'não irei', 'nao vou', 'nao posso'];
+      // Palavras de confirmação
+      const positiveResponses = ['sim', 'yes', 'confirmei', 'vou ir', 'confirmado', 'ok', 'claro', 'com certeza', 'presente', 'vou', 'estou'];
+      const negativeResponses = ['não', 'nao', 'no', 'não vou', 'cancela', 'cancelado', 'não posso', 'vou faltar', 'não irei', 'nao vou', 'nao posso'];
 
-    const isPositive = positiveResponses.some(word => new RegExp(`\\b${word}\\b`, 'i').test(responseLower));
-    const isNegative = negativeResponses.some(word => new RegExp(`\\b${word}\\b`, 'i').test(responseLower));
+      const isPositive = positiveResponses.some(word => new RegExp(`\\b${word}\\b`, 'i').test(responseLower));
+      const isNegative = negativeResponses.some(word => new RegExp(`\\b${word}\\b`, 'i').test(responseLower));
 
-    // Se detectou resposta de confirmação
-    if ((isPositive || isNegative) && phoneNumber) {
-      console.log(`[WAHA Confirmation ANY] Resposta detectada: "${responseText}" (${isPositive ? 'POSITIVA' : 'NEGATIVA'}) para número: ${phoneNumber}`);
+      // Se detectou resposta de confirmação
+      if ((isPositive || isNegative) && phoneNumber) {
+        console.log(`[WAHA Confirmation ANY] Resposta detectada: "${responseText}" (${isPositive ? 'POSITIVA' : 'NEGATIVA'}) para número: ${phoneNumber}`);
 
-      // Extrai userId da sessão
-      const userId = this.extractUserIdFromSession(event.session);
+        // Extrai userId da sessão
+        const userId = this.extractUserIdFromSession(event.session);
 
-      // Busca confirmações pendentes
-      let confirmations = await prisma.confirmation.findMany({
-        where: {
-          status: ConfirmationStatus.PENDING,
-          userId: userId || undefined,
-        },
-        orderBy: { createdAt: 'desc' },
-      });
-
-      if (confirmations.length === 0) {
-        confirmations = await prisma.confirmation.findMany({
-          where: { status: ConfirmationStatus.PENDING },
-          take: 10,
+        // Busca confirmações pendentes
+        let confirmations = await prisma.confirmation.findMany({
+          where: {
+            status: ConfirmationStatus.PENDING,
+            userId: userId || undefined,
+          },
+          orderBy: { createdAt: 'desc' },
         });
-      }
 
-      // Normaliza e busca correspondência
-      const normalizedConfirmations = confirmations.map(c => ({
-        ...c,
-        normalizedPhone: c.contactPhone.replace(/\D/g, ''),
-      }));
+        if (confirmations.length === 0) {
+          confirmations = await prisma.confirmation.findMany({
+            where: { status: ConfirmationStatus.PENDING },
+            take: 10,
+          });
+        }
 
-      console.log('[WAHA Confirmation ANY] Confirmations found:', normalizedConfirmations.length);
-      console.log('[WAHA Confirmation ANY] Número do WhatsApp:', phoneNumber);
-      console.log('[WAHA Confirmation ANY] Números salvos:', normalizedConfirmations.map(c => c.normalizedPhone));
+        // Normaliza e busca correspondência
+        const normalizedConfirmations = confirmations.map(c => ({
+          ...c,
+          normalizedPhone: c.contactPhone.replace(/\D/g, ''),
+        }));
 
-      // Busca correspondência
-      let confirmation = null;
-      for (const c of normalizedConfirmations) {
-        const savedPhone = c.normalizedPhone;
-        
-        if (savedPhone === phoneNumber || 
-            phoneNumber.endsWith(savedPhone) || 
-            savedPhone.endsWith(phoneNumber) ||
-            savedPhone.slice(-10) === phoneNumber.slice(-10) ||
-            savedPhone.slice(-8) === phoneNumber.slice(-8)) {
-          confirmation = c;
-          break;
+        console.log('[WAHA Confirmation ANY] Confirmations found:', normalizedConfirmations.length);
+        console.log('[WAHA Confirmation ANY] Número do WhatsApp:', phoneNumber);
+        console.log('[WAHA Confirmation ANY] Números salvos:', normalizedConfirmations.map(c => c.normalizedPhone));
+
+        // Se só há 1 confirmação pendente, atualiza diretamente (sem correspondência de número)
+        if (normalizedConfirmations.length === 1 && (isPositive || isNegative)) {
+          const c = normalizedConfirmations[0];
+          const newStatus = isPositive ? ConfirmationStatus.CONFIRMED : ConfirmationStatus.DENIED;
+          await prisma.confirmation.update({
+            where: { id: c.id },
+            data: {
+              status: newStatus,
+              response: responseText,
+              respondedAt: new Date(),
+            },
+          });
+          console.log(`[WAHA Confirmation ANY] ✅ Confirmação única atualizada para ${newStatus} (ID: ${c.id})`);
+          return;
+        }
+
+        // Busca correspondência
+        let confirmation = null;
+        for (const c of normalizedConfirmations) {
+          const savedPhone = c.normalizedPhone;
+          
+          if (savedPhone === phoneNumber || 
+              phoneNumber.endsWith(savedPhone) || 
+              savedPhone.endsWith(phoneNumber) ||
+              savedPhone.slice(-10) === phoneNumber.slice(-10) ||
+              savedPhone.slice(-8) === phoneNumber.slice(-8)) {
+            confirmation = c;
+            break;
+          }
+
+          // Estratégia sem DDI
+          const phoneWithoutDDI = phoneNumber.replace(/^55/, '');
+          const savedWithoutDDI = savedPhone.replace(/^55/, '');
+          if (phoneWithoutDDI === savedWithoutDDI) {
+            console.log(`[WAHA Confirmation ANY] ✅ Correspondência sem DDI: ${phoneWithoutDDI} === ${savedWithoutDDI}`);
+            confirmation = c;
+            break;
+          }
+
+          // Últimos 10 sem DDI
+          const last10WithoutDDI = phoneWithoutDDI.slice(-10);
+          const last10SavedWithoutDDI = savedWithoutDDI.slice(-10);
+          if (last10WithoutDDI === last10SavedWithoutDDI && last10WithoutDDI.length >= 8) {
+            console.log(`[WAHA Confirmation ANY] ✅ Correspondência últimos 10 sem DDI: ${last10WithoutDDI} === ${last10SavedWithoutDDI}`);
+            confirmation = c;
+            break;
+          }
+        }
+
+        if (confirmation) {
+          const newStatus = isPositive ? ConfirmationStatus.CONFIRMED : ConfirmationStatus.DENIED;
+          await prisma.confirmation.update({
+            where: { id: confirmation.id },
+            data: {
+              status: newStatus,
+              response: responseText,
+              respondedAt: new Date(),
+            },
+          });
+          console.log(`[WAHA Confirmation ANY] ✅ Confirmação ${confirmation.id} atualizada para ${newStatus}`);
+          return; // Sai após processar a confirmação
         }
       }
-
-      if (confirmation) {
-        const newStatus = isPositive ? ConfirmationStatus.CONFIRMED : ConfirmationStatus.DENIED;
-        await prisma.confirmation.update({
-          where: { id: confirmation.id },
-          data: {
-            status: newStatus,
-            response: responseText,
-            respondedAt: new Date(),
-          },
-        });
-        console.log(`[WAHA Confirmation ANY] ✅ Confirmação ${confirmation.id} atualizada para ${newStatus}`);
-        return; // Sai após processar a confirmação
-      }
-    }
+    } // Fim do else - só processa confirmações para mensagens recebidas
 
     // Processa ACK (status de entrega) APENAS para mensagens enviadas por nós
     if (payload.fromMe) {
