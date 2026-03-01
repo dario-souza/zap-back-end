@@ -5,9 +5,9 @@
   "main": "dist/server.js",
   "type": "module",
   "scripts": {
-    "start": "node --no-warnings --experimental-strip-types src/server.ts",
-    "dev": "node --no-warnings --env-file .env --experimental-strip-types --watch src/server.ts",
-    "test:db": "node --no-warnings --env-file .env --experimental-strip-types test-db.ts",
+    "start": "tsx src/server.ts",
+    "dev": "tsx --env-file .env src/server.ts",
+    "test:db": "tsx --env-file .env test-db.ts",
     "start:all": "npm run start:waha && sleep 5 && npm run dev",
     "start:waha": "docker compose -f docker-compose.waha.yml up -d",
     "stop:all": "docker compose -f docker-compose.waha.yml down",
@@ -22,14 +22,17 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^24.2.1",
     "@types/node-cron": "^3.0.11",
-    "prisma": "6.19",
+    "tsx": "^4.21.0",
     "typescript": "^5.9.2"
   },
   "dependencies": {
-    "@prisma/client": "6.19",
+    "@supabase/ssr": "^0.8.0",
+    "@supabase/supabase-js": "^2.98.0",
     "bcrypt": "^6.0.0",
+    "bullmq": "^5.70.1",
     "cors": "^2.8.5",
     "express": "^5.1.0",
+    "ioredis": "^5.10.0",
     "jsonwebtoken": "^9.0.2",
     "node-cron": "^4.2.1"
   }

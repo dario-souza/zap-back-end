@@ -2,13 +2,10 @@ import express from 'express'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import cors from 'cors'
-import authRoutes from './routes/auth.ts'
-import contactRoutes from './routes/contacts.ts'
-import messageRoutes from './routes/messages.ts'
-import webhookRoutes from './routes/webhooks.ts'
-import whatsappSessionRoutes from './routes/whatsapp-session.ts'
-import templateRoutes from './routes/templates.ts'
-import confirmationRoutes from './routes/confirmations.ts'
+
+import userRoutes from './modules/users/user.routes.ts'
+import messageRoutes from './modules/messages/message.routes.ts'
+import contactRoutes from './modules/contacts/contact.routes.ts'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -25,22 +22,16 @@ app.use(
 )
 app.use(express.json())
 
-// Servir arquivos estáticos da pasta public
 app.use(express.static(path.join(__dirname, '../public')))
 
-app.use('/api/auth', authRoutes)
-app.use('/api/contacts', contactRoutes)
+app.use('/api/users', userRoutes)
 app.use('/api/messages', messageRoutes)
-app.use('/api/webhooks', webhookRoutes)
-app.use('/api/whatsapp', whatsappSessionRoutes)
-app.use('/api/templates', templateRoutes)
-app.use('/api/confirmations', confirmationRoutes)
+app.use('/api/contacts', contactRoutes)
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
 })
 
-// Rota para página de conexão WhatsApp
 app.get('/whatsapp-connect', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/whatsapp-connect.html'))
 })
