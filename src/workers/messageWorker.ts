@@ -9,16 +9,38 @@ let connection: IORedis | null = null;
 const getConnection = () => {
   if (!connection) {
     const redisUrl = process.env.REDIS_URL;
-    console.log('[Worker] REDIS_URL:', redisUrl || 'não definida');
     
-    connection = new IORedis(redisUrl || 'redis://localhost:6379', {
-      maxRetriesPerRequest: null,
-      enableOfflineQueue: false,
-      retryStrategy: (times) => {
-        if (times > 3) return null;
-        return Math.min(times * 100, 3000);
-      },
-    });
+    if (redisUrl) {
+      console.log('[Worker] Usando REDIS_URL:', redisUrl.substring(0, 30) + '...');
+      connection = new IORedis(redisUrl, {
+        maxRetriesPerRequest: null,
+        enableOfflineQueue: false,
+        retryStrategy: (times) => {
+          if (times > 3) return null;
+          return Math.min(times * 100, 3000);
+        },
+      });
+    } else {
+      const host = process.env.REDIS_HOST || process.env.REDISHOST;
+      const port = parseInt(process.env.REDIS_PORT || process.env.REDISPORT || '6379');
+      const password = process.env.REDIS_PASSWORD || process.env.REDISPASSWORD;
+      const user = process.env.REDIS_USER || process.env.REDISUSER || 'default';
+      
+      console.log('[Worker] Usando variáveis separadas - Host:', host, 'Port:', port);
+      
+      connection = new IORedis({
+        host,
+        port,
+        username: user,
+        password,
+        maxRetriesPerRequest: null,
+        enableOfflineQueue: false,
+        retryStrategy: (times) => {
+          if (times > 3) return null;
+          return Math.min(times * 100, 3000);
+        },
+      });
+    }
     
     connection.on('error', (err) => {
       console.error('[Worker] Erro Redis:', err.message);
