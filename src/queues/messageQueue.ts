@@ -1,12 +1,34 @@
 import { Queue, QueueEvents } from 'bullmq';
 import IORedis from 'ioredis';
 
-const connection = new IORedis(process.env.REDIS_URL || 'redis://localhost:6379', {
-  maxRetriesPerRequest: null,
-});
+let connection: IORedis | null = null;
+
+const getConnection = () => {
+  if (!connection) {
+    const redisUrl = process.env.REDIS_URL;
+    console.log('[Queue] REDIS_URL:', redisUrl || 'não definida, usando fallback');
+    
+    connection = new IORedis(redisUrl || 'redis://localhost:6379', {
+      maxRetriesPerRequest: null,
+      retryStrategy: (times) => {
+        if (times > 3) return null;
+        return Math.min(times * 100, 3000);
+      },
+    });
+    
+    connection.on('error', (err) => {
+      console.error('[Queue] Erro na conexão Redis:', err.message);
+    });
+    
+    connection.on('connect', () => {
+      console.log('[Queue] Conectado ao Redis');
+    });
+  }
+  return connection;
+};
 
 export const messageQueue = new Queue('message-queue', {
-  connection,
+  connection: getConnection(),
   defaultJobOptions: {
     removeOnComplete: {
       count: 1000,
@@ -18,7 +40,7 @@ export const messageQueue = new Queue('message-queue', {
 });
 
 export const queueEvents = new QueueEvents('message-queue', {
-  connection,
+  connection: getConnection(),
 });
 
 export const sendMessageJob = async (data: {

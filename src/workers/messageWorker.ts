@@ -4,22 +4,44 @@ import { supabase } from '../lib/supabase.js';
 import { wahaService } from '../services/waha.service.js';
 
 let worker: Worker | null = null;
+let connection: IORedis | null = null;
+
+const getConnection = () => {
+  if (!connection) {
+    const redisUrl = process.env.REDIS_URL;
+    console.log('[Worker] REDIS_URL:', redisUrl || 'não definida');
+    
+    connection = new IORedis(redisUrl || 'redis://localhost:6379', {
+      maxRetriesPerRequest: null,
+      enableOfflineQueue: false,
+      retryStrategy: (times) => {
+        if (times > 3) return null;
+        return Math.min(times * 100, 3000);
+      },
+    });
+    
+    connection.on('error', (err) => {
+      console.error('[Worker] Erro Redis:', err.message);
+    });
+    
+    connection.on('connect', () => {
+      console.log('[Worker] Conectado ao Redis');
+    });
+  }
+  return connection;
+};
 
 const initializeWorker = async () => {
   try {
-    const connection = new IORedis(process.env.REDIS_URL || 'redis://localhost:6379', {
-      maxRetriesPerRequest: null,
-      enableOfflineQueue: false,
-      retryStrategy: () => null,
-    });
-
+    const conn = getConnection();
+    
     await new Promise<void>((resolve, reject) => {
-      connection.on('connect', () => resolve());
-      connection.on('error', (err) => {
+      conn.on('connect', () => resolve());
+      conn.on('error', (err) => {
         console.log('[Worker] Redis não disponível:', err.message);
         reject(err);
       });
-      setTimeout(() => reject(new Error('Timeout')), 2000);
+      setTimeout(() => reject(new Error('Timeout')), 5000);
     });
 
     worker = new Worker(
@@ -52,7 +74,7 @@ const initializeWorker = async () => {
         }
       },
       {
-        connection,
+        connection: conn,
         concurrency: 5,
       }
     );
