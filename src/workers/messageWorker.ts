@@ -1,84 +1,32 @@
 import { Worker, Job } from 'bullmq'
-import IORedis from 'ioredis'
 import { supabase } from '../lib/supabase.js'
 import { wahaService } from '../services/waha.service.js'
 
 let worker: Worker | null = null
 
-// const getConnection = () => {
-//   const redisUrl = process.env.REDIS_URL;
-
-//   if (redisUrl) {
-//     console.log('[Worker] Usando REDIS_URL');
-//     return new IORedis(redisUrl, {
-//       maxRetriesPerRequest: null,
-//       enableOfflineQueue: false,
-//       lazyConnect: true,
-//     });
-//   } else {
-//     const host = process.env.REDIS_HOST || process.env.REDISHOST;
-//     const port = parseInt(process.env.REDIS_PORT || process.env.REDISPORT || '6379');
-//     const password = process.env.REDIS_PASSWORD || process.env.REDISPASSWORD;
-//     const user = process.env.REDIS_USER || process.env.REDISUSER || 'default';
-
-//     console.log('[Worker] Usando variáveis separadas - Host:', host);
-
-//     return new IORedis({
-//       host,
-//       port,
-//       username: user,
-//       password,
-//       maxRetriesPerRequest: null,
-//       enableOfflineQueue: false,
-//       lazyConnect: true,
-//     });
-//   }
-// };
-
-const getConnection = () => {
-  // 1. Tenta a URL completa primeiro
+const getRedisConnection = () => {
   const redisUrl = process.env.REDIS_URL
 
   if (redisUrl && redisUrl.startsWith('redis://')) {
-    console.log('[Worker] Conectando via REDIS_URL')
-    return new IORedis(redisUrl, {
-      maxRetriesPerRequest: null,
-      enableOfflineQueue: false,
-    })
+    console.log('[Worker] Usando REDIS_URL')
+    return redisUrl
   }
 
-  // 2. Fallback para variáveis separadas
   const host = process.env.REDIS_HOST || process.env.REDISHOST
-  const port = parseInt(
-    process.env.REDIS_PORT || process.env.REDISPORT || '6379',
-  )
+  const port = process.env.REDIS_PORT || process.env.REDISPORT || '6379'
   const password = process.env.REDIS_PASSWORD || process.env.REDISPASSWORD
-
-  // LOG DE DEBUG (Importante para ver no Railway)
-  console.log(
-    `[Worker] Tentando conexão manual -> Host: ${host}, Port: ${port}, Password: ${password ? 'definida' : 'vazia'}`,
-  )
+  const user = process.env.REDIS_USER || process.env.REDISUSER || 'default'
 
   if (!host) {
-    throw new Error(
-      'ERRO: Nenhuma configuração de Redis encontrada (HOST está vazio)!',
-    )
+    throw new Error('ERRO: Nenhuma configuração de Redis encontrada!')
   }
 
-  return new IORedis({
-    host,
-    port,
-    password,
-    username: process.env.REDIS_USER || 'default',
-    maxRetriesPerRequest: null,
-    enableOfflineQueue: false,
-  })
+  return `redis://${user}:${password}@${host}:${port}`
 }
+
 const startWorker = async () => {
   try {
-    const conn = getConnection()
-
-    await conn.connect()
+    const redisUrl = getRedisConnection()
 
     worker = new Worker(
       'message-queue',
@@ -110,7 +58,7 @@ const startWorker = async () => {
         }
       },
       {
-        connection: conn,
+        connection: redisUrl as any,
         concurrency: 5,
       },
     )

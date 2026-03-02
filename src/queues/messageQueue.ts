@@ -1,57 +1,29 @@
 import { Queue, QueueEvents } from 'bullmq';
-import IORedis from 'ioredis';
 
-let connection: IORedis | null = null;
+const getRedisUrl = () => {
+  const redisUrl = process.env.REDIS_URL;
 
-const getConnection = () => {
-  if (!connection) {
-    const redisUrl = process.env.REDIS_URL;
-    
-    // Se tiver URL completa, usa ela
-    if (redisUrl) {
-      console.log('[Queue] Usando REDIS_URL:', redisUrl.substring(0, 30) + '...');
-      connection = new IORedis(redisUrl, {
-        maxRetriesPerRequest: null,
-        retryStrategy: (times) => {
-          if (times > 3) return null;
-          return Math.min(times * 100, 3000);
-        },
-      });
-    } else {
-      // Usa variáveis separadas
-      const host = process.env.REDIS_HOST || process.env.REDISHOST;
-      const port = parseInt(process.env.REDIS_PORT || process.env.REDISPORT || '6379');
-      const password = process.env.REDIS_PASSWORD || process.env.REDISPASSWORD;
-      const user = process.env.REDIS_USER || process.env.REDISUSER || 'default';
-      
-      console.log('[Queue] Usando variáveis separadas - Host:', host, 'Port:', port);
-      
-      connection = new IORedis({
-        host,
-        port,
-        username: user,
-        password,
-        maxRetriesPerRequest: null,
-        retryStrategy: (times) => {
-          if (times > 3) return null;
-          return Math.min(times * 100, 3000);
-        },
-      });
-    }
-    
-    connection.on('error', (err) => {
-      console.error('[Queue] Erro na conexão Redis:', err.message);
-    });
-    
-    connection.on('connect', () => {
-      console.log('[Queue] Conectado ao Redis');
-    });
+  if (redisUrl && redisUrl.startsWith('redis://')) {
+    console.log('[Queue] Usando REDIS_URL');
+    return redisUrl;
   }
-  return connection;
+
+  const host = process.env.REDIS_HOST || process.env.REDISHOST;
+  const port = process.env.REDIS_PORT || process.env.REDISPORT || '6379';
+  const password = process.env.REDIS_PASSWORD || process.env.REDISPASSWORD;
+  const user = process.env.REDIS_USER || process.env.REDISUSER || 'default';
+
+  if (!host) {
+    throw new Error('ERRO: Nenhuma configuração de Redis encontrada!');
+  }
+
+  return `redis://${user}:${password}@${host}:${port}`;
 };
 
+const redisUrl = getRedisUrl();
+
 export const messageQueue = new Queue('message-queue', {
-  connection: getConnection(),
+  connection: redisUrl as any,
   defaultJobOptions: {
     removeOnComplete: {
       count: 1000,
@@ -63,7 +35,7 @@ export const messageQueue = new Queue('message-queue', {
 });
 
 export const queueEvents = new QueueEvents('message-queue', {
-  connection: getConnection(),
+  connection: redisUrl as any,
 });
 
 export const sendMessageJob = async (data: {
@@ -72,7 +44,7 @@ export const sendMessageJob = async (data: {
   content: string;
   scheduledAt?: string;
 }) => {
-  const delay = data.scheduledAt 
+  const delay = data.scheduledAt
     ? new Date(data.scheduledAt).getTime() - Date.now()
     : 0;
 
