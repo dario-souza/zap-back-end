@@ -34,6 +34,21 @@ export class WahaController {
       return;
     }
 
+    // Primeiro cria/inicia a sessão se não existir
+    const startResult = await this.service.createOrStartSession(userId);
+    
+    if (!startResult.success) {
+      res.status(500).json({ error: startResult.error || 'Erro ao iniciar sessão WAHA' });
+      return;
+    }
+
+    // Se já está conectada, retorna status
+    if (startResult.status === 'WORKING') {
+      res.json({ qr: null, connected: true, message: 'WhatsApp já conectado!' });
+      return;
+    }
+
+    // Agora obtém o QR Code
     const result = await this.service.getQRCode(userId);
     
     if (result.error) {
@@ -41,7 +56,7 @@ export class WahaController {
       return;
     }
 
-    res.json({ qr: result.qr });
+    res.json({ qr: result.qr, status: startResult.status });
   });
 
   startSession = asyncHandler(async (req: AuthRequest, res: Response) => {
