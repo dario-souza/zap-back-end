@@ -6,6 +6,7 @@ import cors from 'cors'
 import userRoutes from './modules/users/user.routes.ts'
 import messageRoutes from './modules/messages/message.routes.ts'
 import contactRoutes from './modules/contacts/contact.routes.ts'
+import wahaRoutes from './modules/waha/waha.routes.ts'
 import { errorHandler } from './lib/baseController.ts'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -28,6 +29,7 @@ app.use(express.static(path.join(__dirname, '../public')))
 app.use('/api/users', userRoutes)
 app.use('/api/messages', messageRoutes)
 app.use('/api/contacts', contactRoutes)
+app.use('/api/whatsapp', wahaRoutes)
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })

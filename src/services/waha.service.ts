@@ -106,11 +106,26 @@ export class WahaService {
       );
 
       if (!response.ok) {
+        console.error('[WAHA] Erro ao obter QR:', await response.text());
         return null;
       }
 
-      const data = await response.json() as { qr?: { code?: string } };
-      return data.qr?.code || null;
+      const data = await response.json();
+      console.log('[WAHA] QR Response:', JSON.stringify(data, null, 2));
+      
+      // WAHA pode retornar diferentes formatos
+      // { qr: { code: "..." } } ou { qr: { base64: "..." } }
+      if (data.qr?.code) {
+        return data.qr.code;
+      }
+      if (data.qr?.base64) {
+        return data.qr.base64;
+      }
+      if (data.url) {
+        return data.url;
+      }
+      
+      return null;
     } catch (error) {
       console.error('[WAHA] Erro ao obter QR code:', error);
       return null;
@@ -130,6 +145,23 @@ export class WahaService {
       return response.ok;
     } catch (error) {
       console.error('[WAHA] Erro ao fazer logout:', error);
+      return false;
+    }
+  }
+
+  async restartSession(): Promise<boolean> {
+    try {
+      const response = await fetch(
+        `${this.baseUrl}/api/sessions/${this.session}/restart`,
+        {
+          method: 'POST',
+          headers: this.getHeaders(),
+        }
+      );
+
+      return response.ok;
+    } catch (error) {
+      console.error('[WAHA] Erro ao reiniciar sessão:', error);
       return false;
     }
   }
