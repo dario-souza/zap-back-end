@@ -1,46 +1,11 @@
 import { Queue, QueueEvents } from 'bullmq';
+import { getRedisConnection, type RedisConnection } from '../lib/redis.js';
 
-const getRedisUrl = (): string | { host: string; port: number; password?: string; username?: string } => {
-  const redisUrl = process.env.REDIS_URL;
-
-  if (redisUrl && redisUrl.startsWith('redis://')) {
-    console.log('[Queue] Usando REDIS_URL');
-    try {
-      const url = new URL(redisUrl);
-      return {
-        host: url.hostname,
-        port: parseInt(url.port) || 6379,
-        password: url.password || undefined,
-        username: url.username || 'default',
-      };
-    } catch {
-      return redisUrl;
-    }
-  }
-
-  const host = process.env.REDIS_HOST || process.env.REDISHOST;
-  const port = process.env.REDIS_PORT || process.env.REDISPORT || '6379';
-  const password = process.env.REDIS_PASSWORD || process.env.REDISPASSWORD;
-  const user = process.env.REDIS_USER || process.env.REDISUSER || 'default';
-
-  if (!host) {
-    console.error('[Queue] Variáveis Redis não encontradas:', {
-      REDIS_URL: process.env.REDIS_URL,
-      REDIS_HOST: process.env.REDIS_HOST,
-      REDISHOST: process.env.REDISHOST,
-    });
-    throw new Error('ERRO: Nenhuma configuração de Redis encontrada!');
-  }
-
-  return {
-    host,
-    port: parseInt(port),
-    password: password || undefined,
-    username: user,
-  };
+const getRedisUrl = (): RedisConnection => {
+  return getRedisConnection();
 };
 
-let cachedRedisUrl: string | { host: string; port: number; password?: string; username?: string } | null = null;
+let cachedRedisUrl: RedisConnection | null = null;
 
 const getLazyRedisUrl = () => {
   if (!cachedRedisUrl) {
@@ -70,6 +35,7 @@ export const sendMessageJob = async (data: {
   phone: string;
   content: string;
   scheduledAt?: string;
+  userId?: string;
 }) => {
   const delay = data.scheduledAt
     ? new Date(data.scheduledAt).getTime() - Date.now()

@@ -7,11 +7,11 @@ const controller = new ContactController();
 
 router.use(authenticate);
 
-router.get('/', controller.getAll.bind(controller));
-router.get('/:id', controller.getById.bind(controller));
-router.post('/', controller.create.bind(controller));
-router.put('/:id', controller.update.bind(controller));
-router.delete('/:id', controller.delete.bind(controller));
-router.delete('/', controller.deleteAll.bind(controller));
+router.get('/', controller.getAll);
+router.get('/:id', controller.getById);
+router.post('/', controller.create);
+router.put('/:id', controller.update);
+router.delete('/:id', controller.delete);
+router.delete('/', controller.deleteAll);
 
 export default router;

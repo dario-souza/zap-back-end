@@ -6,20 +6,21 @@ import cors from 'cors'
 import userRoutes from './modules/users/user.routes.ts'
 import messageRoutes from './modules/messages/message.routes.ts'
 import contactRoutes from './modules/contacts/contact.routes.ts'
+import { errorHandler } from './lib/baseController.ts'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 const app = express()
 
-app.use(
-  cors({
-    origin: '*',
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-  }),
-)
+const corsOptions: cors.CorsOptions = {
+  origin: process.env.ALLOWED_ORIGINS?.split(',') || '*',
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}
+
+app.use(cors(corsOptions))
 app.use(express.json())
 
 app.use(express.static(path.join(__dirname, '../public')))
@@ -34,6 +35,10 @@ app.get('/api/health', (req, res) => {
 
 app.get('/whatsapp-connect', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/whatsapp-connect.html'))
+})
+
+app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  errorHandler(err, res)
 })
 
 export default app

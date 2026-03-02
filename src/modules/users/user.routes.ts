@@ -5,7 +5,7 @@ import { authenticate } from '../../middleware/auth.js';
 const router = Router();
 const controller = new UserController();
 
-router.get('/profile', authenticate, controller.getProfile.bind(controller));
-router.put('/profile', authenticate, controller.updateProfile.bind(controller));
+router.get('/profile', authenticate, controller.getProfile);
+router.put('/profile', authenticate, controller.updateProfile);
 
 export default router;

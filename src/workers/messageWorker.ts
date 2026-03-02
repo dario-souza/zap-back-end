@@ -1,48 +1,14 @@
 import { Worker, Job } from 'bullmq'
 import { supabase } from '../lib/supabase.js'
 import { wahaService } from '../services/waha.service.js'
+import { getRedisConnection } from '../lib/redis.js'
 
 let worker: Worker | null = null
-
-const getRedisConnection = (): string | { host: string; port: number; password?: string; username?: string } => {
-  const redisUrl = process.env.REDIS_URL
-  console.log('REDIS_URL REAL:', redisUrl)
-  
-  if (redisUrl && redisUrl.startsWith('redis://')) {
-    console.log('[Worker] Usando REDIS_URL')
-    try {
-      const url = new URL(redisUrl)
-      return {
-        host: url.hostname,
-        port: parseInt(url.port) || 6379,
-        password: url.password || undefined,
-        username: url.username || 'default',
-      }
-    } catch {
-      return redisUrl
-    }
-  }
-
-  const host = process.env.REDIS_HOST || process.env.REDISHOST
-  const port = process.env.REDIS_PORT || process.env.REDISPORT || '6379'
-  const password = process.env.REDIS_PASSWORD || process.env.REDISPASSWORD
-  const user = process.env.REDIS_USER || process.env.REDISUSER || 'default'
-
-  if (!host) {
-    throw new Error('ERRO: Nenhuma configuração de Redis encontrada!')
-  }
-
-  return {
-    host,
-    port: parseInt(port),
-    password: password || undefined,
-    username: user,
-  }
-}
 
 const startWorker = async () => {
   try {
     const redisUrl = getRedisConnection()
+    console.log('[Worker] Usando REDIS_URL')
 
     worker = new Worker(
       'message-queue',

@@ -4,11 +4,10 @@ const WAHA_URL = process.env.WAHA_URL || process.env.WAHA_API_URL || 'https://wa
 const WAHA_API_KEY = process.env.WAHA_API_KEY || '';
 const WAHA_SESSION = process.env.WAHA_SESSION || 'default';
 
-interface SendMessageResponse {
-  success: boolean;
-  messageId?: string;
-  error?: string;
-}
+const formatPhoneToChatId = (phone: string): string => {
+  const cleanPhone = phone.replace(/\D/g, '');
+  return `${cleanPhone}@c.us`;
+};
 
 export class WahaService {
   private baseUrl: string;
@@ -30,12 +29,14 @@ export class WahaService {
 
   async sendMessage(phone: string, message: string): Promise<boolean> {
     try {
+      const chatId = formatPhoneToChatId(phone);
+      
       const response = await fetch(`${this.baseUrl}/api/sendText`, {
         method: 'POST',
         headers: this.getHeaders(),
         body: JSON.stringify({
           session: this.session,
-          to: phone,
+          chatId: chatId,
           text: message,
         }),
       });
@@ -55,7 +56,7 @@ export class WahaService {
     }
   }
 
-  async getSessionStatus() {
+  async getSessionStatus(): Promise<{ connected: boolean; status?: string; error?: string }> {
     try {
       const response = await fetch(
         `${this.baseUrl}/api/sessions/${this.session}`,
@@ -69,9 +70,9 @@ export class WahaService {
         return { connected: false, error: await response.text() };
       }
 
-      const data = await response.json();
+      const data = await response.json() as { session?: { status?: string } };
       return {
-        connected: data.session?.status === 'LOADED',
+        connected: data.session?.status === 'WORKING',
         status: data.session?.status,
       };
     } catch (error) {
@@ -81,15 +82,10 @@ export class WahaService {
 
   async startSession(): Promise<boolean> {
     try {
-      const response = await fetch(`${this.baseUrl}/api/sessions/start`, {
+      const response = await fetch(`${this.baseUrl}/api/sessions/${this.session}/start`, {
         method: 'POST',
         headers: this.getHeaders(),
-        body: JSON.stringify({
-          session: this.session,
-          config: {
-            webhookUrl: process.env.WAHA_WEBHOOK_URL,
-          },
-        }),
+        body: JSON.stringify({}),
       });
 
       return response.ok;
@@ -102,9 +98,9 @@ export class WahaService {
   async getQRCode(): Promise<string | null> {
     try {
       const response = await fetch(
-        `${this.baseUrl}/api/sessions/${this.session}/qr`,
+        `${this.baseUrl}/api/${this.session}/auth/qr`,
         {
-          method: 'GET',
+          method: 'POST',
           headers: this.getHeaders(),
         }
       );
@@ -113,7 +109,7 @@ export class WahaService {
         return null;
       }
 
-      const data = await response.json();
+      const data = await response.json() as { qr?: { code?: string } };
       return data.qr?.code || null;
     } catch (error) {
       console.error('[WAHA] Erro ao obter QR code:', error);
@@ -121,20 +117,47 @@ export class WahaService {
     }
   }
 
-  async disconnect(): Promise<boolean> {
+  async logout(): Promise<boolean> {
     try {
       const response = await fetch(
-        `${this.baseUrl}/api/sessions/${this.session}`,
+        `${this.baseUrl}/api/sessions/${this.session}/logout`,
         {
-          method: 'DELETE',
+          method: 'POST',
           headers: this.getHeaders(),
         }
       );
 
       return response.ok;
     } catch (error) {
-      console.error('[WAHA] Erro ao desconectar:', error);
+      console.error('[WAHA] Erro ao fazer logout:', error);
       return false;
+    }
+  }
+
+  async checkPhoneNumberExists(phone: string): Promise<{ exists: boolean; chatId?: string }> {
+    try {
+      const chatId = formatPhoneToChatId(phone);
+      
+      const response = await fetch(
+        `${this.baseUrl}/api/contacts/check-exists?phone=${phone}&session=${this.session}`,
+        {
+          method: 'GET',
+          headers: this.getHeaders(),
+        }
+      );
+
+      if (!response.ok) {
+        return { exists: false };
+      }
+
+      const data = await response.json() as { numberExists?: boolean; chatId?: string };
+      return {
+        exists: data.numberExists || false,
+        chatId: data.chatId,
+      };
+    } catch (error) {
+      console.error('[WAHA] Erro ao verificar número:', error);
+      return { exists: false };
     }
   }
 }

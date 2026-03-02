@@ -4,10 +4,11 @@
   "description": "back-end-api-whats",
   "main": "dist/server.js",
   "type": "module",
-  "scripts": {
+"scripts": {
     "start": "tsx src/server.ts",
     "dev": "tsx --env-file .env src/server.ts",
     "test:db": "tsx --env-file .env test-db.ts",
+    "typecheck": "tsc --noEmit",
     "start:all": "npm run start:waha && sleep 5 && npm run dev",
     "start:waha": "docker compose -f docker-compose.waha.yml up -d",
     "stop:all": "docker compose -f docker-compose.waha.yml down",
