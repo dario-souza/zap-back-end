@@ -67,6 +67,10 @@ export class WahaService {
       );
 
       if (!response.ok) {
+        // Sessão não existe - retorna como não conectada
+        if (response.status === 404) {
+          return { connected: false, status: 'NOT_CREATED' };
+        }
         return { connected: false, error: await response.text() };
       }
 
@@ -77,6 +81,98 @@ export class WahaService {
       };
     } catch (error) {
       return { connected: false, error: String(error) };
+    }
+  }
+
+  async createSession(): Promise<{ success: boolean; error?: string }> {
+    try {
+      const response = await fetch(`${this.baseUrl}/api/sessions`, {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify({
+          name: this.session,
+          start: false, // Não iniciar automaticamente
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        console.error('[WAHA] Erro ao criar sessão:', error);
+        return { success: false, error };
+      }
+
+      const data = await response.json();
+      console.log('[WAHA] Sessão criada:', data);
+      return { success: true };
+    } catch (error) {
+      console.error('[WAHA] Erro ao criar sessão:', error);
+      return { success: false, error: String(error) };
+    }
+  }
+
+  async createOrStartSession(): Promise<{ success: boolean; status?: string; error?: string }> {
+    try {
+      // 1. Primeiro verifica se a sessão já existe
+      const statusResponse = await fetch(
+        `${this.baseUrl}/api/sessions/${this.session}`,
+        { method: 'GET', headers: this.getHeaders() }
+      );
+
+      if (statusResponse.ok) {
+        // Sessão existe, verifica o status
+        const statusData = await statusResponse.json() as { session?: { status?: string } };
+        const currentStatus = statusData.session?.status;
+
+        if (currentStatus === 'WORKING') {
+          return { success: true, status: 'WORKING' };
+        }
+
+        // Se não está funcionando, tenta iniciar
+        if (currentStatus !== 'STARTING') {
+          const startResponse = await fetch(
+            `${this.baseUrl}/api/sessions/${this.session}/start`,
+            { method: 'POST', headers: this.getHeaders() }
+          );
+
+          if (!startResponse.ok) {
+            const error = await startResponse.text();
+            return { success: false, error };
+          }
+
+          const startData = await startResponse.json();
+          return { success: true, status: startData.session?.status || 'STARTING' };
+        }
+
+        return { success: true, status: currentStatus };
+      }
+
+      // 2. Sessão não existe, cria uma nova
+      if (statusResponse.status === 404) {
+        const createResponse = await fetch(`${this.baseUrl}/api/sessions`, {
+          method: 'POST',
+          headers: this.getHeaders(),
+          body: JSON.stringify({
+            name: this.session,
+            start: true, // Iniciar automaticamente após criar
+          }),
+        });
+
+        if (!createResponse.ok) {
+          const error = await createResponse.text();
+          return { success: false, error };
+        }
+
+        const createData = await createResponse.json();
+        return { success: true, status: createData.session?.status || 'STARTING' };
+      }
+
+      // Outro erro ao verificar status
+      const error = await statusResponse.text();
+      return { success: false, error };
+
+    } catch (error) {
+      console.error('[WAHA] Erro ao criar/iniciar sessão:', error);
+      return { success: false, error: String(error) };
     }
   }
 

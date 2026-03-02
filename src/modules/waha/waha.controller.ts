@@ -20,10 +20,16 @@ export class WahaController {
   });
 
   getQRCode = asyncHandler(async (req: AuthRequest, res: Response) => {
+    // Primeiro garante que a sessão existe e está iniciada
+    await this.service.createOrStartSession();
+    
     const qrCode = await this.service.getQRCode();
     
     if (!qrCode) {
-      res.status(500).json({ error: 'Erro ao obter QR Code. Verifique se a sessão está iniciada.' });
+      res.status(400).json({ 
+        error: 'QR Code não disponível. A sessão pode estar em processo de conexão ou não existe.',
+        hint: 'Tente iniciar a sessão primeiro.'
+      });
       return;
     }
 
@@ -31,14 +37,20 @@ export class WahaController {
   });
 
   startSession = asyncHandler(async (req: AuthRequest, res: Response) => {
-    const success = await this.service.startSession();
+    const result = await this.service.createOrStartSession();
     
-    if (!success) {
-      res.status(500).json({ error: 'Erro ao iniciar sessão WAHA' });
+    if (!result.success) {
+      res.status(500).json({ error: result.error || 'Erro ao iniciar sessão WAHA' });
       return;
     }
 
-    res.json({ success: true, message: 'Sessão iniciada com sucesso' });
+    res.json({ 
+      success: true, 
+      status: result.status,
+      message: result.status === 'WORKING' 
+        ? 'Sessão já está conectada!' 
+        : 'Sessão iniciada! Escaneie o QR Code.'
+    });
   });
 
   disconnect = asyncHandler(async (req: AuthRequest, res: Response) => {
