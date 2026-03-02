@@ -6,7 +6,7 @@ let worker: Worker | null = null
 
 const getRedisConnection = () => {
   const redisUrl = process.env.REDIS_URL
-
+  console.log('REDIS_URL REAL:', redisUrl)
   if (redisUrl && redisUrl.startsWith('redis://')) {
     console.log('[Worker] Usando REDIS_URL')
     return redisUrl
