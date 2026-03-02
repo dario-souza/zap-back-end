@@ -13,11 +13,11 @@ const startWorker = async () => {
     worker = new Worker(
       'message-queue',
       async (job: Job) => {
-        const { messageId, phone, content } = job.data
+        const { messageId, phone, content, userId } = job.data
         console.log(`[Worker] Processando mensagem ${messageId}`)
 
         try {
-          const sent = await wahaService.sendMessage(phone, content)
+          const sent = await wahaService.sendMessage(userId, phone, content)
 
           if (sent) {
             await supabase

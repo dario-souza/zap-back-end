@@ -279,7 +279,7 @@ export class WahaService {
         return { error };
       }
 
-      const data = await response.json();
+      const data = await response.json() as any;
       console.log('[WAHA] QR Response:', JSON.stringify(data, null, 2));
       
       if (data.qr?.code) {
