@@ -14,16 +14,28 @@ const getRedisUrl = () => {
   const user = process.env.REDIS_USER || process.env.REDISUSER || 'default';
 
   if (!host) {
+    console.error('[Queue] Variáveis Redis não encontradas:', {
+      REDIS_URL: process.env.REDIS_URL,
+      REDIS_HOST: process.env.REDIS_HOST,
+      REDISHOST: process.env.REDISHOST,
+    });
     throw new Error('ERRO: Nenhuma configuração de Redis encontrada!');
   }
 
   return `redis://${user}:${password}@${host}:${port}`;
 };
 
-const redisUrl = getRedisUrl();
+let cachedRedisUrl: string | null = null;
+
+const getLazyRedisUrl = () => {
+  if (!cachedRedisUrl) {
+    cachedRedisUrl = getRedisUrl();
+  }
+  return cachedRedisUrl;
+};
 
 export const messageQueue = new Queue('message-queue', {
-  connection: redisUrl as any,
+  connection: getLazyRedisUrl() as any,
   defaultJobOptions: {
     removeOnComplete: {
       count: 1000,
@@ -35,7 +47,7 @@ export const messageQueue = new Queue('message-queue', {
 });
 
 export const queueEvents = new QueueEvents('message-queue', {
-  connection: redisUrl as any,
+  connection: getLazyRedisUrl() as any,
 });
 
 export const sendMessageJob = async (data: {
