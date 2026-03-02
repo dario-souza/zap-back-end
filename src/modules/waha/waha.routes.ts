@@ -11,6 +11,5 @@ router.get('/session/status', controller.getStatus);
 router.get('/session/qr', controller.getQRCode);
 router.post('/session/start', controller.startSession);
 router.post('/session/disconnect', controller.disconnect);
-router.post('/session/restart', controller.restartSession);
 
 export default router;

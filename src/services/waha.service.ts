@@ -2,22 +2,28 @@ import { supabase } from '../lib/supabase.js';
 
 const WAHA_URL = process.env.WAHA_URL || process.env.WAHA_API_URL || 'https://waha1.ux.net.br';
 const WAHA_API_KEY = process.env.WAHA_API_KEY || '';
-const WAHA_SESSION = process.env.WAHA_SESSION || 'default';
 
 const formatPhoneToChatId = (phone: string): string => {
   const cleanPhone = phone.replace(/\D/g, '');
   return `${cleanPhone}@c.us`;
 };
 
+interface UserSession {
+  id: string;
+  user_id: string;
+  session_name: string;
+  status: string;
+  phone?: string;
+  push_name?: string;
+}
+
 export class WahaService {
   private baseUrl: string;
   private apiKey: string;
-  private session: string;
 
   constructor() {
     this.baseUrl = WAHA_URL;
     this.apiKey = WAHA_API_KEY;
-    this.session = WAHA_SESSION;
   }
 
   private getHeaders() {
@@ -27,7 +33,66 @@ export class WahaService {
     };
   }
 
-  async sendMessage(phone: string, message: string): Promise<boolean> {
+  private async getUserSession(userId: string): Promise<UserSession | null> {
+    const { data, error } = await supabase
+      .from('user_sessions')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+
+    if (error || !data) {
+      return null;
+    }
+    return data as UserSession;
+  }
+
+  private async saveUserSession(userId: string, sessionName: string, status: string = 'PENDING'): Promise<void> {
+    const existing = await this.getUserSession(userId);
+    
+    if (existing) {
+      await supabase
+        .from('user_sessions')
+        .update({ 
+          session_name: sessionName, 
+          status,
+          updated_at: new Date().toISOString()
+        })
+        .eq('user_id', userId);
+    } else {
+      await supabase
+        .from('user_sessions')
+        .insert({ 
+          user_id: userId, 
+          session_name: sessionName, 
+          status 
+        });
+    }
+  }
+
+  private async updateUserSessionStatus(userId: string, status: string, phone?: string, pushName?: string): Promise<void> {
+    await supabase
+      .from('user_sessions')
+      .update({ 
+        status,
+        phone,
+        push_name: pushName,
+        connected_at: status === 'WORKING' ? new Date().toISOString() : null,
+        updated_at: new Date().toISOString()
+      })
+      .eq('user_id', userId);
+  }
+
+  private getSessionName(userId: string): string {
+    return `user_${userId.substring(0, 8)}`;
+  }
+
+  async sendMessage(userId: string, phone: string, message: string): Promise<boolean> {
+    const session = await this.getUserSession(userId);
+    if (!session) {
+      console.error('[WAHA] Sessão do usuário não encontrada');
+      return false;
+    }
+
     try {
       const chatId = formatPhoneToChatId(phone);
       
@@ -35,7 +100,7 @@ export class WahaService {
         method: 'POST',
         headers: this.getHeaders(),
         body: JSON.stringify({
-          session: this.session,
+          session: session.session_name,
           chatId: chatId,
           text: message,
         }),
@@ -56,10 +121,15 @@ export class WahaService {
     }
   }
 
-  async getSessionStatus(): Promise<{ connected: boolean; status?: string; error?: string }> {
+  async getSessionStatus(userId: string): Promise<{ connected: boolean; status?: string; error?: string; phone?: string; pushName?: string }> {
+    const session = await this.getUserSession(userId);
+    if (!session) {
+      return { connected: false, status: 'NOT_CREATED' };
+    }
+
     try {
       const response = await fetch(
-        `${this.baseUrl}/api/sessions/${this.session}`,
+        `${this.baseUrl}/api/sessions/${session.session_name}`,
         {
           method: 'GET',
           headers: this.getHeaders(),
@@ -67,70 +137,67 @@ export class WahaService {
       );
 
       if (!response.ok) {
-        // Sessão não existe - retorna como não conectada
         if (response.status === 404) {
           return { connected: false, status: 'NOT_CREATED' };
         }
-        return { connected: false, error: await response.text() };
+        const errorText = await response.text();
+        return { connected: false, error: errorText };
       }
 
-      const data = await response.json() as { session?: { status?: string } };
+      const data = await response.json() as { 
+        session?: { 
+          status?: string; 
+          me?: { id?: string; pushName?: string } 
+        } 
+      };
+      
+      const status = data.session?.status;
+      const phone = data.session?.me?.id;
+      const pushName = data.session?.me?.pushName;
+
+      // Atualiza status no banco
+      await this.updateUserSessionStatus(userId, status || 'UNKNOWN', phone, pushName);
+
       return {
-        connected: data.session?.status === 'WORKING',
-        status: data.session?.status,
+        connected: status === 'WORKING',
+        status: status,
+        phone: phone,
+        pushName: pushName,
       };
     } catch (error) {
       return { connected: false, error: String(error) };
     }
   }
 
-  async createSession(): Promise<{ success: boolean; error?: string }> {
+  async createOrStartSession(userId: string): Promise<{ success: boolean; status?: string; error?: string }> {
+    const sessionName = this.getSessionName(userId);
+    
     try {
-      const response = await fetch(`${this.baseUrl}/api/sessions`, {
-        method: 'POST',
-        headers: this.getHeaders(),
-        body: JSON.stringify({
-          name: this.session,
-          start: false, // Não iniciar automaticamente
-        }),
-      });
-
-      if (!response.ok) {
-        const error = await response.text();
-        console.error('[WAHA] Erro ao criar sessão:', error);
-        return { success: false, error };
-      }
-
-      const data = await response.json();
-      console.log('[WAHA] Sessão criada:', data);
-      return { success: true };
-    } catch (error) {
-      console.error('[WAHA] Erro ao criar sessão:', error);
-      return { success: false, error: String(error) };
-    }
-  }
-
-  async createOrStartSession(): Promise<{ success: boolean; status?: string; error?: string }> {
-    try {
-      // 1. Primeiro verifica se a sessão já existe
+      // 1. Verifica se a sessão já existe no WAHA
       const statusResponse = await fetch(
-        `${this.baseUrl}/api/sessions/${this.session}`,
+        `${this.baseUrl}/api/sessions/${sessionName}`,
         { method: 'GET', headers: this.getHeaders() }
       );
 
       if (statusResponse.ok) {
-        // Sessão existe, verifica o status
-        const statusData = await statusResponse.json() as { session?: { status?: string } };
+        const statusData = await statusResponse.json() as { session?: { status?: string; me?: { id?: string; pushName?: string } } };
         const currentStatus = statusData.session?.status;
 
         if (currentStatus === 'WORKING') {
+          await this.updateUserSessionStatus(userId, 'WORKING', statusData.session?.me?.id, statusData.session?.me?.pushName);
           return { success: true, status: 'WORKING' };
         }
 
-        // Se não está funcionando, tenta iniciar
-        if (currentStatus !== 'STARTING') {
+        // Se precisa de QR Code ou está Starting
+        if (currentStatus === 'SCAN_QR_CODE' || currentStatus === 'STARTING' || currentStatus === 'FAILED') {
+          await this.saveUserSession(userId, sessionName, currentStatus || 'PENDING');
+          return { success: true, status: currentStatus };
+        }
+
+        // Se está stopped, inicia
+        if (currentStatus === 'STOPPED') {
           const startResponse = await fetch(
-            `${this.baseUrl}/api/sessions/${this.session}/start`,
+            `${this.baseUrl}/api/sessions/${sessionName}/start`,
             { method: 'POST', headers: this.getHeaders() }
           );
 
@@ -139,34 +206,49 @@ export class WahaService {
             return { success: false, error };
           }
 
-          const startData = await startResponse.json();
-          return { success: true, status: startData.session?.status || 'STARTING' };
+          const startData = await startResponse.json() as { session?: { status?: string } };
+          const newStatus = startData.session?.status || 'STARTING';
+          await this.saveUserSession(userId, sessionName, newStatus);
+          return { success: true, status: newStatus };
         }
 
+        await this.saveUserSession(userId, sessionName, currentStatus || 'PENDING');
         return { success: true, status: currentStatus };
       }
 
-      // 2. Sessão não existe, cria uma nova
+      // 2. Sessão não existe - cria uma nova com NOWEB
       if (statusResponse.status === 404) {
         const createResponse = await fetch(`${this.baseUrl}/api/sessions`, {
           method: 'POST',
           headers: this.getHeaders(),
           body: JSON.stringify({
-            name: this.session,
-            start: true, // Iniciar automaticamente após criar
+            name: sessionName,
+            start: true,
+            config: {
+              noweb: {
+                store: {
+                  enabled: true,
+                  fullSync: false
+                }
+              }
+            }
           }),
         });
 
         if (!createResponse.ok) {
           const error = await createResponse.text();
+          console.error('[WAHA] Erro ao criar sessão:', error);
           return { success: false, error };
         }
 
-        const createData = await createResponse.json();
-        return { success: true, status: createData.session?.status || 'STARTING' };
+        const createData = await createResponse.json() as { session?: { status?: string } };
+        const newStatus = createData.session?.status || 'STARTING';
+        
+        await this.saveUserSession(userId, sessionName, newStatus);
+        return { success: true, status: newStatus };
       }
 
-      // Outro erro ao verificar status
+      // Outro erro
       const error = await statusResponse.text();
       return { success: false, error };
 
@@ -176,25 +258,15 @@ export class WahaService {
     }
   }
 
-  async startSession(): Promise<boolean> {
-    try {
-      const response = await fetch(`${this.baseUrl}/api/sessions/${this.session}/start`, {
-        method: 'POST',
-        headers: this.getHeaders(),
-        body: JSON.stringify({}),
-      });
-
-      return response.ok;
-    } catch (error) {
-      console.error('[WAHA] Erro ao iniciar sessão:', error);
-      return false;
+  async getQRCode(userId: string): Promise<{ qr?: string; error?: string }> {
+    const session = await this.getUserSession(userId);
+    if (!session) {
+      return { error: 'Sessão não encontrada. Crie uma sessão primeiro.' };
     }
-  }
 
-  async getQRCode(): Promise<string | null> {
     try {
       const response = await fetch(
-        `${this.baseUrl}/api/${this.session}/auth/qr`,
+        `${this.baseUrl}/api/${session.session_name}/auth/qr`,
         {
           method: 'POST',
           headers: this.getHeaders(),
@@ -202,72 +274,67 @@ export class WahaService {
       );
 
       if (!response.ok) {
-        console.error('[WAHA] Erro ao obter QR:', await response.text());
-        return null;
+        const error = await response.text();
+        console.error('[WAHA] Erro ao obter QR:', error);
+        return { error };
       }
 
       const data = await response.json();
       console.log('[WAHA] QR Response:', JSON.stringify(data, null, 2));
       
-      // WAHA pode retornar diferentes formatos
-      // { qr: { code: "..." } } ou { qr: { base64: "..." } }
       if (data.qr?.code) {
-        return data.qr.code;
+        return { qr: data.qr.code };
       }
       if (data.qr?.base64) {
-        return data.qr.base64;
+        return { qr: data.qr.base64 };
       }
       if (data.url) {
-        return data.url;
+        return { qr: data.url };
       }
       
-      return null;
+      return { error: 'QR Code não disponível' };
     } catch (error) {
       console.error('[WAHA] Erro ao obter QR code:', error);
-      return null;
+      return { error: String(error) };
     }
   }
 
-  async logout(): Promise<boolean> {
+  async disconnect(userId: string): Promise<{ success: boolean; error?: string }> {
+    const session = await this.getUserSession(userId);
+    if (!session) {
+      return { success: false, error: 'Sessão não encontrada' };
+    }
+
     try {
       const response = await fetch(
-        `${this.baseUrl}/api/sessions/${this.session}/logout`,
+        `${this.baseUrl}/api/sessions/${session.session_name}/logout`,
         {
           method: 'POST',
           headers: this.getHeaders(),
         }
       );
 
-      return response.ok;
+      if (response.ok) {
+        await this.updateUserSessionStatus(userId, 'DISCONNECTED');
+        return { success: true };
+      }
+
+      const error = await response.text();
+      return { success: false, error };
     } catch (error) {
-      console.error('[WAHA] Erro ao fazer logout:', error);
-      return false;
+      return { success: false, error: String(error) };
     }
   }
 
-  async restartSession(): Promise<boolean> {
-    try {
-      const response = await fetch(
-        `${this.baseUrl}/api/sessions/${this.session}/restart`,
-        {
-          method: 'POST',
-          headers: this.getHeaders(),
-        }
-      );
-
-      return response.ok;
-    } catch (error) {
-      console.error('[WAHA] Erro ao reiniciar sessão:', error);
-      return false;
+  async checkPhoneNumberExists(userId: string, phone: string): Promise<{ exists: boolean; chatId?: string }> {
+    const session = await this.getUserSession(userId);
+    if (!session) {
+      return { exists: false };
     }
-  }
 
-  async checkPhoneNumberExists(phone: string): Promise<{ exists: boolean; chatId?: string }> {
     try {
-      const chatId = formatPhoneToChatId(phone);
-      
       const response = await fetch(
-        `${this.baseUrl}/api/contacts/check-exists?phone=${phone}&session=${this.session}`,
+        `${this.baseUrl}/api/contacts/check-exists?phone=${phone}&session=${session.session_name}`,
         {
           method: 'GET',
           headers: this.getHeaders(),

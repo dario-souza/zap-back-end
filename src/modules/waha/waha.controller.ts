@@ -11,33 +11,47 @@ export class WahaController {
   }
 
   getStatus = asyncHandler(async (req: AuthRequest, res: Response) => {
-    const status = await this.service.getSessionStatus();
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ error: 'Usuário não autenticado' });
+      return;
+    }
+
+    const status = await this.service.getSessionStatus(userId);
     res.json({
       connected: status.connected,
       status: status.status,
       error: status.error,
+      phone: status.phone,
+      pushName: status.pushName,
     });
   });
 
   getQRCode = asyncHandler(async (req: AuthRequest, res: Response) => {
-    // Primeiro garante que a sessão existe e está iniciada
-    await this.service.createOrStartSession();
-    
-    const qrCode = await this.service.getQRCode();
-    
-    if (!qrCode) {
-      res.status(400).json({ 
-        error: 'QR Code não disponível. A sessão pode estar em processo de conexão ou não existe.',
-        hint: 'Tente iniciar a sessão primeiro.'
-      });
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ error: 'Usuário não autenticado' });
       return;
     }
 
-    res.json({ qr: qrCode });
+    const result = await this.service.getQRCode(userId);
+    
+    if (result.error) {
+      res.status(400).json({ error: result.error });
+      return;
+    }
+
+    res.json({ qr: result.qr });
   });
 
   startSession = asyncHandler(async (req: AuthRequest, res: Response) => {
-    const result = await this.service.createOrStartSession();
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ error: 'Usuário não autenticado' });
+      return;
+    }
+
+    const result = await this.service.createOrStartSession(userId);
     
     if (!result.success) {
       res.status(500).json({ error: result.error || 'Erro ao iniciar sessão WAHA' });
@@ -54,24 +68,19 @@ export class WahaController {
   });
 
   disconnect = asyncHandler(async (req: AuthRequest, res: Response) => {
-    const success = await this.service.logout();
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ error: 'Usuário não autenticado' });
+      return;
+    }
+
+    const result = await this.service.disconnect(userId);
     
-    if (!success) {
-      res.status(500).json({ error: 'Erro ao desconectar sessão WAHA' });
+    if (!result.success) {
+      res.status(500).json({ error: result.error || 'Erro ao desconectar sessão WAHA' });
       return;
     }
 
     res.json({ success: true, message: 'Sessão desconectada com sucesso' });
-  });
-
-  restartSession = asyncHandler(async (req: AuthRequest, res: Response) => {
-    const success = await this.service.restartSession();
-    
-    if (!success) {
-      res.status(500).json({ error: 'Erro ao reiniciar sessão WAHA' });
-      return;
-    }
-
-    res.json({ success: true, message: 'Sessão reiniciada com sucesso' });
   });
 }
