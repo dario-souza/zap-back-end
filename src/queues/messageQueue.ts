@@ -1,11 +1,21 @@
 import { Queue, QueueEvents } from 'bullmq';
 
-const getRedisUrl = () => {
+const getRedisUrl = (): string | { host: string; port: number; password?: string; username?: string } => {
   const redisUrl = process.env.REDIS_URL;
 
   if (redisUrl && redisUrl.startsWith('redis://')) {
     console.log('[Queue] Usando REDIS_URL');
-    return redisUrl;
+    try {
+      const url = new URL(redisUrl);
+      return {
+        host: url.hostname,
+        port: parseInt(url.port) || 6379,
+        password: url.password || undefined,
+        username: url.username || 'default',
+      };
+    } catch {
+      return redisUrl;
+    }
   }
 
   const host = process.env.REDIS_HOST || process.env.REDISHOST;
@@ -22,10 +32,15 @@ const getRedisUrl = () => {
     throw new Error('ERRO: Nenhuma configuração de Redis encontrada!');
   }
 
-  return `redis://${user}:${password}@${host}:${port}`;
+  return {
+    host,
+    port: parseInt(port),
+    password: password || undefined,
+    username: user,
+  };
 };
 
-let cachedRedisUrl: string | null = null;
+let cachedRedisUrl: string | { host: string; port: number; password?: string; username?: string } | null = null;
 
 const getLazyRedisUrl = () => {
   if (!cachedRedisUrl) {
