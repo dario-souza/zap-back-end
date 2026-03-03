@@ -217,6 +217,8 @@ export class WahaService {
 
       // 2. Sessão não existe - cria uma nova com NOWEB
       if (statusResponse.status === 404) {
+        console.log('[WAHA] Criando nova sessão:', sessionName);
+        
         const createResponse = await fetch(`${this.baseUrl}/api/sessions`, {
           method: 'POST',
           headers: this.getHeaders(),
@@ -240,8 +242,10 @@ export class WahaService {
           return { success: false, error };
         }
 
-        const createData = await createResponse.json() as { session?: { status?: string } };
-        const newStatus = createData.session?.status || 'STARTING';
+        const createData = await createResponse.json() as { status?: string };
+        console.log('[WAHA] Sessão criada, resposta:', createData);
+        
+        const newStatus = createData.status || 'STARTING';
         
         await this.saveUserSession(userId, sessionName, newStatus);
         return { success: true, status: newStatus };
