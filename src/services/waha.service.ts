@@ -29,6 +29,7 @@ export class WahaService {
   private getHeaders() {
     return {
       'Content-Type': 'application/json',
+      'Accept': 'application/json',
       'X-Api-Key': this.apiKey,
     };
   }
@@ -145,15 +146,13 @@ export class WahaService {
       }
 
       const data = await response.json() as { 
-        session?: { 
-          status?: string; 
-          me?: { id?: string; pushName?: string } 
-        } 
+        status?: string; 
+        me?: { id?: string; pushName?: string } 
       };
       
-      const status = data.session?.status;
-      const phone = data.session?.me?.id;
-      const pushName = data.session?.me?.pushName;
+      const status = data.status;
+      const phone = data.me?.id;
+      const pushName = data.me?.pushName;
 
       // Atualiza status no banco
       await this.updateUserSessionStatus(userId, status || 'UNKNOWN', phone, pushName);
@@ -180,11 +179,11 @@ export class WahaService {
       );
 
       if (statusResponse.ok) {
-        const statusData = await statusResponse.json() as { session?: { status?: string; me?: { id?: string; pushName?: string } } };
-        const currentStatus = statusData.session?.status;
+        const statusData = await statusResponse.json() as { status?: string; me?: { id?: string; pushName?: string } };
+        const currentStatus = statusData.status;
 
         if (currentStatus === 'WORKING') {
-          await this.updateUserSessionStatus(userId, 'WORKING', statusData.session?.me?.id, statusData.session?.me?.pushName);
+          await this.updateUserSessionStatus(userId, 'WORKING', statusData.me?.id, statusData.me?.pushName);
           return { success: true, status: 'WORKING' };
         }
 
@@ -206,8 +205,8 @@ export class WahaService {
             return { success: false, error };
           }
 
-          const startData = await startResponse.json() as { session?: { status?: string } };
-          const newStatus = startData.session?.status || 'STARTING';
+          const startData = await startResponse.json() as { status?: string };
+          const newStatus = startData.status || 'STARTING';
           await this.saveUserSession(userId, sessionName, newStatus);
           return { success: true, status: newStatus };
         }
@@ -268,7 +267,7 @@ export class WahaService {
       const response = await fetch(
         `${this.baseUrl}/api/${session.session_name}/auth/qr`,
         {
-          method: 'POST',
+          method: 'GET',
           headers: this.getHeaders(),
         }
       );
@@ -282,14 +281,14 @@ export class WahaService {
       const data = await response.json() as any;
       console.log('[WAHA] QR Response:', JSON.stringify(data, null, 2));
       
-      if (data.qr?.code) {
-        return { qr: data.qr.code };
-      }
-      if (data.qr?.base64) {
-        return { qr: data.qr.base64 };
-      }
       if (data.url) {
         return { qr: data.url };
+      }
+      if (data.base64) {
+        return { qr: data.base64 };
+      }
+      if (data.code) {
+        return { qr: data.code };
       }
       
       return { error: 'QR Code não disponível' };
