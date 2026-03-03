@@ -57,4 +57,26 @@ export class ContactController {
     await this.service.deleteAll(userId);
     res.status(204).send();
   });
+
+  importCSV = asyncHandler(async (req: AuthRequest, res: Response) => {
+    const userId = getUserId(req);
+    const { csvContent } = req.body;
+    
+    if (!csvContent) {
+      res.status(400).json({ error: 'Conteúdo CSV é obrigatório' });
+      return;
+    }
+
+    const result = await this.service.importCSV(userId, csvContent);
+    res.json(result);
+  });
+
+  exportCSV = asyncHandler(async (req: AuthRequest, res: Response) => {
+    const userId = getUserId(req);
+    const csv = await this.service.exportCSV(userId);
+    
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename=contatos.csv');
+    res.send(csv);
+  });
 }

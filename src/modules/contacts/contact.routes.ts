@@ -10,6 +10,8 @@ router.use(authenticate);
 router.get('/', controller.getAll);
 router.get('/:id', controller.getById);
 router.post('/', controller.create);
+router.post('/import', controller.importCSV);
+router.get('/export', controller.exportCSV);
 router.put('/:id', controller.update);
 router.delete('/:id', controller.delete);
 router.delete('/', controller.deleteAll);
