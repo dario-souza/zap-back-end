@@ -4,8 +4,9 @@
   "description": "back-end-api-whats",
   "main": "dist/server.js",
   "type": "module",
-"scripts": {
+  "scripts": {
     "start": "tsx src/server.ts",
+    "start:worker": "tsx src/workers/messageWorker.ts",
     "dev": "tsx --env-file .env src/server.ts",
     "test:db": "tsx --env-file .env test-db.ts",
     "typecheck": "tsc --noEmit",
