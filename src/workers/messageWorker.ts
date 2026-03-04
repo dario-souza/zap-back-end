@@ -1,14 +1,13 @@
 import { Worker, Job } from 'bullmq'
-import { supabase } from '../lib/supabase.js'
+import { supabase } from '../config/supabase.js'
 import { wahaService } from '../services/waha.service.js'
-import { getRedisConnection } from '../lib/redis.js'
+import { redisConnection } from '../config/redis.js'
 
 let worker: Worker | null = null
 
 const startWorker = async () => {
   try {
-    const redisUrl = getRedisConnection()
-    console.log('[Worker] Usando REDIS_URL')
+    console.log('[Worker] Iniciando worker de mensagens...')
 
     worker = new Worker(
       'message-queue',
@@ -40,7 +39,7 @@ const startWorker = async () => {
         }
       },
       {
-        connection: redisUrl as any,
+        connection: redisConnection,
         concurrency: 5,
       },
     )
@@ -63,10 +62,7 @@ const startWorker = async () => {
   }
 }
 
-// Iniciar worker em background (não bloquear servidor)
-setTimeout(() => {
-  startWorker()
-}, 1000)
+startWorker()
 
 export const stopWorker = async () => {
   if (worker) {

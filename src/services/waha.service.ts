@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase.js';
+import { supabase } from '../config/supabase.js';
 
 const WAHA_URL = process.env.WAHA_URL || process.env.WAHA_API_URL || 'https://waha1.ux.net.br';
 const WAHA_API_KEY = process.env.WAHA_API_KEY || '';
@@ -229,7 +229,6 @@ export class WahaService {
               noweb: {
                 store: {
                   enabled: true,
-                  fullSync: false
                 }
               }
             }
@@ -261,7 +260,7 @@ export class WahaService {
     }
   }
 
-  async getQRCode(userId: string): Promise<{ qr?: string; error?: string }> {
+  async getQRCode(userId: string): Promise<{ qr?: string; error?: string; isPairingCode?: boolean }> {
     const session = await this.getUserSession(userId);
     if (!session) {
       return { error: 'Sessão não encontrada. Crie uma sessão primeiro.' };
@@ -282,17 +281,34 @@ export class WahaService {
         return { error };
       }
 
-      const data = await response.json() as any;
-      console.log('[WAHA] QR Response:', JSON.stringify(data, null, 2));
+      const contentType = response.headers.get('content-type') || '';
       
-      if (data.url) {
-        return { qr: data.url };
+      if (contentType.includes('image/png')) {
+        const buffer = await response.arrayBuffer();
+        const base64 = Buffer.from(buffer).toString('base64');
+        console.log('[WAHA] QR Response (PNG): imagem obtida com sucesso');
+        return { qr: `data:image/png;base64,${base64}`, isPairingCode: false };
       }
-      if (data.base64) {
-        return { qr: data.base64 };
-      }
-      if (data.code) {
-        return { qr: data.code };
+      
+      if (contentType.includes('application/json')) {
+        const data = await response.json() as any;
+        console.log('[WAHA] QR Response (JSON):', JSON.stringify(data, null, 2));
+        
+        if (data.url) {
+          return { qr: data.url };
+        }
+        if (data.base64) {
+          return { qr: data.base64 };
+        }
+        if (data.code) {
+          return { qr: data.code };
+        }
+        if (data.value) {
+          return { qr: data.value, isPairingCode: true };
+        }
+        if (data.data && data.mimetype === 'image/png') {
+          return { qr: `data:image/png;base64,${data.data}`, isPairingCode: false };
+        }
       }
       
       return { error: 'QR Code não disponível' };
@@ -356,6 +372,32 @@ export class WahaService {
     } catch (error) {
       console.error('[WAHA] Erro ao verificar número:', error);
       return { exists: false };
+    }
+  }
+
+  async deleteSession(userId: string): Promise<{ success: boolean; error?: string }> {
+    const session = await this.getUserSession(userId);
+    if (!session) {
+      return { success: true };
+    }
+
+    try {
+      const response = await fetch(
+        `${this.baseUrl}/api/sessions/${session.session_name}`,
+        {
+          method: 'DELETE',
+          headers: this.getHeaders(),
+        }
+      );
+
+      if (response.ok || response.status === 404) {
+        return { success: true };
+      }
+
+      const error = await response.text();
+      return { success: false, error };
+    } catch (error) {
+      return { success: false, error: String(error) };
     }
   }
 }
