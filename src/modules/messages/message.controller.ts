@@ -1,26 +1,20 @@
 import { Response } from 'express';
-import { MessageService } from './message.service.js';
-import type { AuthRequest } from '../../middleware/auth.js';
-import type { CreateMessageInput, UpdateMessageInput } from './message.types.js';
-import { asyncHandler, getUserId } from '../../lib/baseController.js';
+import { messageService } from './message.service.ts';
+import type { AuthRequest } from '../../middleware/auth.ts';
+import type { CreateMessageDto, UpdateMessageDto } from './message.types.ts';
+import { asyncHandler, getUserId } from '../../lib/baseController.ts';
 
-export class MessageController {
-  private service: MessageService;
-
-  constructor() {
-    this.service = new MessageService();
-  }
-
-  getAll = asyncHandler(async (req: AuthRequest, res: Response) => {
+export const messageController = {
+  getAll: asyncHandler(async (req: AuthRequest, res: Response) => {
     const userId = getUserId(req);
-    const messages = await this.service.getAll(userId);
+    const messages = await messageService.getAll(userId);
     res.json(messages);
-  });
+  }),
 
-  getById = asyncHandler(async (req: AuthRequest, res: Response) => {
+  getById: asyncHandler(async (req: AuthRequest, res: Response) => {
     const userId = getUserId(req);
     const { id } = req.params;
-    const message = await this.service.getById(id, userId);
+    const message = await messageService.getById(id, userId);
 
     if (!message) {
       res.status(404).json({ error: 'Mensagem não encontrada' });
@@ -28,44 +22,44 @@ export class MessageController {
     }
 
     res.json(message);
-  });
+  }),
 
-  create = asyncHandler(async (req: AuthRequest, res: Response) => {
+  create: asyncHandler(async (req: AuthRequest, res: Response) => {
     const userId = getUserId(req);
-    const input: CreateMessageInput = req.body;
-    const message = await this.service.create(userId, input);
+    const input: CreateMessageDto = req.body;
+    const message = await messageService.create(userId, input);
     res.status(201).json(message);
-  });
+  }),
 
-  update = asyncHandler(async (req: AuthRequest, res: Response) => {
+  update: asyncHandler(async (req: AuthRequest, res: Response) => {
     const userId = getUserId(req);
     const { id } = req.params;
-    const input: UpdateMessageInput = req.body;
-    const message = await this.service.update(id, userId, input);
+    const input: UpdateMessageDto = req.body;
+    const message = await messageService.update(id, userId, input);
     res.json(message);
-  });
+  }),
 
-  delete = asyncHandler(async (req: AuthRequest, res: Response) => {
+  delete: asyncHandler(async (req: AuthRequest, res: Response) => {
     const userId = getUserId(req);
     const { id } = req.params;
-    await this.service.delete(id, userId);
+    await messageService.delete(id, userId);
     res.status(204).send();
-  });
+  }),
 
-  deleteAll = asyncHandler(async (req: AuthRequest, res: Response) => {
+  deleteAll: asyncHandler(async (req: AuthRequest, res: Response) => {
     const userId = getUserId(req);
-    await this.service.deleteAll(userId);
+    await messageService.deleteAll(userId);
     res.status(204).send();
-  });
+  }),
 
-  sendNow = asyncHandler(async (req: AuthRequest, res: Response) => {
+  sendNow: asyncHandler(async (req: AuthRequest, res: Response) => {
     const userId = getUserId(req);
     const { id } = req.params;
-    const message = await this.service.sendNow(id, userId);
+    const message = await messageService.sendNow(id, userId);
     res.json(message);
-  });
+  }),
 
-  createBulk = asyncHandler(async (req: AuthRequest, res: Response) => {
+  createBulk: asyncHandler(async (req: AuthRequest, res: Response) => {
     const userId = getUserId(req);
     const { content, contactIds, scheduledAt, sendNow, recurrenceType } = req.body;
     
@@ -74,11 +68,11 @@ export class MessageController {
       return;
     }
 
-    const result = await this.service.createBulk(userId, content, contactIds, scheduledAt, sendNow, recurrenceType);
+    const result = await messageService.createBulk(userId, content, contactIds, scheduledAt, sendNow, recurrenceType);
     res.status(201).json(result);
-  });
+  }),
 
-  createWithReminder = asyncHandler(async (req: AuthRequest, res: Response) => {
+  createWithReminder: asyncHandler(async (req: AuthRequest, res: Response) => {
     const userId = getUserId(req);
     const { content, contactId, scheduledAt, reminderDays } = req.body;
     
@@ -87,11 +81,11 @@ export class MessageController {
       return;
     }
 
-    const message = await this.service.createWithReminder(userId, content, contactId, scheduledAt, reminderDays);
+    const message = await messageService.createWithReminder(userId, content, contactId, scheduledAt, reminderDays);
     res.status(201).json(message);
-  });
+  }),
 
-  sendTest = asyncHandler(async (req: AuthRequest, res: Response) => {
+  sendTest: asyncHandler(async (req: AuthRequest, res: Response) => {
     const userId = getUserId(req);
     const { phone, message } = req.body;
     
@@ -100,7 +94,7 @@ export class MessageController {
       return;
     }
 
-    const result = await this.service.sendTest(userId, phone, message);
+    const result = await messageService.sendTest(userId, phone, message);
     res.json(result);
-  });
-}
+  }),
+};

@@ -1,36 +1,30 @@
-import { ContactRepository } from './contact.repository.js';
-import type { Contact, CreateContactInput, UpdateContactInput } from './contact.types.js';
+import { contactRepository } from './contact.repository.ts';
+import type { Contact, CreateContactDto, UpdateContactDto } from './contact.types.ts';
 
-export class ContactService {
-  private repository: ContactRepository;
-
-  constructor() {
-    this.repository = new ContactRepository();
-  }
-
+export const contactService = {
   async getAll(userId: string): Promise<Contact[]> {
-    return this.repository.findAll(userId);
-  }
+    return contactRepository.findAll(userId);
+  },
 
   async getById(id: string, userId: string): Promise<Contact | null> {
-    return this.repository.findById(id, userId);
-  }
+    return contactRepository.findById(id, userId);
+  },
 
-  async create(userId: string, input: CreateContactInput): Promise<Contact> {
-    return this.repository.create(userId, input);
-  }
+  async create(userId: string, input: CreateContactDto): Promise<Contact> {
+    return contactRepository.create(userId, input);
+  },
 
-  async update(id: string, userId: string, input: UpdateContactInput): Promise<Contact> {
-    return this.repository.update(id, userId, input);
-  }
+  async update(id: string, userId: string, input: UpdateContactDto): Promise<Contact> {
+    return contactRepository.update(id, userId, input);
+  },
 
   async delete(id: string, userId: string): Promise<void> {
-    return this.repository.delete(id, userId);
-  }
+    return contactRepository.delete(id, userId);
+  },
 
   async deleteAll(userId: string): Promise<void> {
-    return this.repository.deleteAll(userId);
-  }
+    return contactRepository.deleteAll(userId);
+  },
 
   async importCSV(userId: string, csvContent: string): Promise<{ success: number; failed: number }> {
     const lines = csvContent.trim().split('\n');
@@ -50,7 +44,7 @@ export class ContactService {
           const email = parts[2] || undefined;
 
           if (phone.length >= 10) {
-            await this.repository.create(userId, { name, phone, email });
+            await contactRepository.create(userId, { name, phone, email });
             success++;
           } else {
             failed++;
@@ -65,10 +59,10 @@ export class ContactService {
     }
 
     return { success, failed };
-  }
+  },
 
   async exportCSV(userId: string): Promise<string> {
-    const contacts = await this.repository.findAll(userId);
+    const contacts = await contactRepository.findAll(userId);
     
     let csv = 'Nome,Telefone,Email\n';
     
@@ -77,5 +71,5 @@ export class ContactService {
     }
     
     return csv;
-  }
-}
+  },
+};

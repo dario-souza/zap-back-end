@@ -1,7 +1,7 @@
 import { Response } from 'express';
-import { sessionService } from './session.service.js';
-import type { AuthRequest } from '../../middleware/auth.js';
-import { asyncHandler } from '../../lib/baseController.js';
+import { sessionService } from './session.service.ts';
+import type { AuthRequest } from '../../middleware/auth.ts';
+import { asyncHandler } from '../../lib/baseController.ts';
 
 export const sessionController = {
   get: asyncHandler(async (req: AuthRequest, res: Response) => {

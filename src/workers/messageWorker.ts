@@ -1,7 +1,7 @@
 import { Worker, Job } from 'bullmq'
-import { supabase } from '../config/supabase.js'
-import { wahaService } from '../services/waha.service.js'
-import { redisConnection } from '../config/redis.js'
+import { supabase } from '../config/supabase.ts'
+import { wahaService } from '../services/waha.service.ts'
+import { redisConnection } from '../config/redis.ts'
 
 let worker: Worker | null = null
 
@@ -39,7 +39,7 @@ const startWorker = async () => {
         }
       },
       {
-        connection: redisConnection,
+        connection: redisConnection as any,
         concurrency: 5,
       },
     )

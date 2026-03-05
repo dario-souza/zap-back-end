@@ -1,15 +1,13 @@
 import { Router } from 'express';
-import { ConfirmationController } from './confirmation.controller.js';
-import { authenticate } from '../../middleware/auth.js';
+import { confirmationController } from './confirmation.controller.ts';
+import { authenticate } from '../../middleware/auth.ts';
 
-const router = Router();
-const controller = new ConfirmationController();
+export const confirmationRoutes = Router();
 
-router.use(authenticate);
+confirmationRoutes.use(authenticate);
 
-router.get('/', controller.getAll);
-router.post('/', controller.create);
-router.put('/:id', controller.update);
-router.delete('/:id', controller.delete);
-
-export default router;
+confirmationRoutes.get('/', confirmationController.getAll);
+confirmationRoutes.get('/:id', confirmationController.getById);
+confirmationRoutes.post('/', confirmationController.create);
+confirmationRoutes.put('/:id', confirmationController.update);
+confirmationRoutes.delete('/:id', confirmationController.delete);

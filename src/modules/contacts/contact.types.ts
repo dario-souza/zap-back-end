@@ -8,13 +8,13 @@ export interface Contact {
   updated_at: string;
 }
 
-export interface CreateContactInput {
+export interface CreateContactDto {
   name: string;
   phone: string;
   email?: string;
 }
 
-export interface UpdateContactInput {
+export interface UpdateContactDto {
   name?: string;
   phone?: string;
   email?: string;

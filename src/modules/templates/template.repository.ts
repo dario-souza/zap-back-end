@@ -1,21 +1,21 @@
 import { supabase } from '../../config/supabase.ts';
-import type { Contact, CreateContactDto, UpdateContactDto } from './contact.types.ts';
+import type { Template, CreateTemplateDto, UpdateTemplateDto } from './template.types.ts';
 
-export const contactRepository = {
-  async findAll(userId: string): Promise<Contact[]> {
+export const templateRepository = {
+  async findAll(userId: string): Promise<Template[]> {
     const { data, error } = await supabase
-      .from('contacts')
+      .from('templates')
       .select('*')
       .eq('user_id', userId)
-      .order('name');
+      .order('created_at', { ascending: false });
 
     if (error) throw error;
     return data || [];
   },
 
-  async findById(id: string, userId: string): Promise<Contact | null> {
+  async findById(id: string, userId: string): Promise<Template | null> {
     const { data, error } = await supabase
-      .from('contacts')
+      .from('templates')
       .select('*')
       .eq('id', id)
       .eq('user_id', userId)
@@ -25,14 +25,13 @@ export const contactRepository = {
     return data;
   },
 
-  async create(userId: string, input: CreateContactDto): Promise<Contact> {
+  async create(userId: string, input: CreateTemplateDto): Promise<Template> {
     const { data, error } = await supabase
-      .from('contacts')
+      .from('templates')
       .insert({
         user_id: userId,
         name: input.name,
-        phone: input.phone,
-        email: input.email,
+        content: input.content,
       })
       .select()
       .single();
@@ -41,9 +40,9 @@ export const contactRepository = {
     return data;
   },
 
-  async update(id: string, userId: string, input: UpdateContactDto): Promise<Contact> {
+  async update(id: string, userId: string, input: UpdateTemplateDto): Promise<Template> {
     const { data, error } = await supabase
-      .from('contacts')
+      .from('templates')
       .update({
         ...input,
         updated_at: new Date().toISOString(),
@@ -59,7 +58,7 @@ export const contactRepository = {
 
   async delete(id: string, userId: string): Promise<void> {
     const { error } = await supabase
-      .from('contacts')
+      .from('templates')
       .delete()
       .eq('id', id)
       .eq('user_id', userId);
@@ -69,7 +68,7 @@ export const contactRepository = {
 
   async deleteAll(userId: string): Promise<void> {
     const { error } = await supabase
-      .from('contacts')
+      .from('templates')
       .delete()
       .eq('user_id', userId);
 

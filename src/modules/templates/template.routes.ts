@@ -1,16 +1,13 @@
 import { Router } from 'express';
-import { TemplateController } from './template.controller.js';
-import { authenticate } from '../../middleware/auth.js';
+import { templateController } from './template.controller.ts';
+import { authenticate } from '../../middleware/auth.ts';
 
-const router = Router();
-const controller = new TemplateController();
+export const templateRoutes = Router();
 
-router.use(authenticate);
+templateRoutes.use(authenticate);
 
-router.get('/', controller.getAll);
-router.post('/', controller.create);
-router.put('/:id', controller.update);
-router.delete('/:id', controller.delete);
-router.delete('/', controller.deleteAll);
-
-export default router;
+templateRoutes.get('/', templateController.getAll);
+templateRoutes.post('/', templateController.create);
+templateRoutes.put('/:id', templateController.update);
+templateRoutes.delete('/:id', templateController.delete);
+templateRoutes.delete('/', templateController.deleteAll);

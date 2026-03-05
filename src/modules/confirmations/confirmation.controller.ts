@@ -1,50 +1,43 @@
 import { Response } from 'express';
-import { ConfirmationService } from './confirmation.service.js';
-import type { AuthRequest } from '../../middleware/auth.js';
-import { asyncHandler } from '../../lib/baseController.js';
+import { confirmationService } from './confirmation.service.ts';
+import type { AuthRequest } from '../../middleware/auth.ts';
+import { asyncHandler, getUserId } from '../../lib/baseController.ts';
 
-export class ConfirmationController {
-  private service: ConfirmationService;
-
-  constructor() {
-    this.service = new ConfirmationService();
-  }
-
-  getAll = asyncHandler(async (req: AuthRequest, res: Response) => {
-    const userId = req.user?.id;
-    if (!userId) {
-      res.status(401).json({ error: 'Usuário não autenticado' });
-      return;
-    }
-
-    const confirmations = await this.service.getAll(userId);
+export const confirmationController = {
+  getAll: asyncHandler(async (req: AuthRequest, res: Response) => {
+    const userId = getUserId(req);
+    const confirmations = await confirmationService.getAll(userId);
     res.json(confirmations);
-  });
+  }),
 
-  create = asyncHandler(async (req: AuthRequest, res: Response) => {
-    const userId = req.user?.id;
-    if (!userId) {
-      res.status(401).json({ error: 'Usuário não autenticado' });
+  getById: asyncHandler(async (req: AuthRequest, res: Response) => {
+    const userId = getUserId(req);
+    const { id } = req.params;
+    const confirmation = await confirmationService.getById(id, userId);
+
+    if (!confirmation) {
+      res.status(404).json({ error: 'Confirmação não encontrada' });
       return;
     }
 
+    res.json(confirmation);
+  }),
+
+  create: asyncHandler(async (req: AuthRequest, res: Response) => {
+    const userId = getUserId(req);
     const { contactName, contactPhone, eventDate, messageContent } = req.body;
+    
     if (!contactName || !contactPhone || !eventDate) {
       res.status(400).json({ error: 'Nome do contato, telefone e data do evento são obrigatórios' });
       return;
     }
 
-    const confirmation = await this.service.create(userId, contactName, contactPhone, eventDate, messageContent);
+    const confirmation = await confirmationService.create(userId, contactName, contactPhone, eventDate, messageContent);
     res.status(201).json(confirmation);
-  });
+  }),
 
-  update = asyncHandler(async (req: AuthRequest, res: Response) => {
-    const userId = req.user?.id;
-    if (!userId) {
-      res.status(401).json({ error: 'Usuário não autenticado' });
-      return;
-    }
-
+  update: asyncHandler(async (req: AuthRequest, res: Response) => {
+    const userId = getUserId(req);
     const { id } = req.params;
     const { status, response } = req.body;
 
@@ -53,19 +46,14 @@ export class ConfirmationController {
       return;
     }
 
-    const confirmation = await this.service.update(userId, id, status, response);
+    const confirmation = await confirmationService.update(id, userId, status, response);
     res.json(confirmation);
-  });
+  }),
 
-  delete = asyncHandler(async (req: AuthRequest, res: Response) => {
-    const userId = req.user?.id;
-    if (!userId) {
-      res.status(401).json({ error: 'Usuário não autenticado' });
-      return;
-    }
-
+  delete: asyncHandler(async (req: AuthRequest, res: Response) => {
+    const userId = getUserId(req);
     const { id } = req.params;
-    await this.service.delete(userId, id);
-    res.json({ success: true });
-  });
-}
+    await confirmationService.delete(id, userId);
+    res.status(204).send();
+  }),
+};

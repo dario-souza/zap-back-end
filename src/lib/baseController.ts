@@ -1,5 +1,5 @@
 import { Response, NextFunction } from 'express';
-import type { AuthRequest } from '../middleware/auth.js';
+import type { AuthRequest } from '../middleware/auth.ts';
 
 export class AppError extends Error {
   constructor(

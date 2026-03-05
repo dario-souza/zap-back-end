@@ -1,7 +1,7 @@
-import { supabase } from '../../lib/supabase.js';
-import type { Message, CreateMessageInput, UpdateMessageInput } from './message.types.js';
+import { supabase } from '../../config/supabase.ts';
+import type { Message, CreateMessageDto, UpdateMessageDto } from './message.types.ts';
 
-export class MessageRepository {
+export const messageRepository = {
   async findAll(userId: string): Promise<Message[]> {
     const { data, error } = await supabase
       .from('messages')
@@ -11,7 +11,7 @@ export class MessageRepository {
 
     if (error) throw error;
     return data || [];
-  }
+  },
 
   async findById(id: string, userId: string): Promise<Message | null> {
     const { data, error } = await supabase
@@ -23,9 +23,9 @@ export class MessageRepository {
 
     if (error) return null;
     return data;
-  }
+  },
 
-  async create(userId: string, input: CreateMessageInput): Promise<Message> {
+  async create(userId: string, input: CreateMessageDto): Promise<Message> {
     const scheduledAt = input.scheduled_at ? new Date(input.scheduled_at) : null;
     const isScheduled = scheduledAt && scheduledAt > new Date();
 
@@ -49,9 +49,9 @@ export class MessageRepository {
 
     if (error) throw error;
     return data;
-  }
+  },
 
-  async update(id: string, userId: string, input: UpdateMessageInput): Promise<Message> {
+  async update(id: string, userId: string, input: UpdateMessageDto): Promise<Message> {
     const { data, error } = await supabase
       .from('messages')
       .update({
@@ -65,7 +65,7 @@ export class MessageRepository {
 
     if (error) throw error;
     return data;
-  }
+  },
 
   async delete(id: string, userId: string): Promise<void> {
     const { error } = await supabase
@@ -75,7 +75,7 @@ export class MessageRepository {
       .eq('user_id', userId);
 
     if (error) throw error;
-  }
+  },
 
   async deleteAll(userId: string): Promise<void> {
     const { error } = await supabase
@@ -84,7 +84,7 @@ export class MessageRepository {
       .eq('user_id', userId);
 
     if (error) throw error;
-  }
+  },
 
   async findScheduled(): Promise<Message[]> {
     const { data, error } = await supabase
@@ -95,7 +95,7 @@ export class MessageRepository {
 
     if (error) throw error;
     return data || [];
-  }
+  },
 
   async findPendingReminders(): Promise<Message[]> {
     const now = new Date();
@@ -111,7 +111,7 @@ export class MessageRepository {
 
     if (error) throw error;
     return data || [];
-  }
+  },
 
   async findRecurring(): Promise<Message[]> {
     const { data, error } = await supabase
@@ -122,5 +122,5 @@ export class MessageRepository {
 
     if (error) throw error;
     return data || [];
-  }
-}
+  },
+};

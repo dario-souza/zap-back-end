@@ -1,90 +1,37 @@
-import { supabase } from '../../lib/supabase.js';
+import { templateRepository } from './template.repository.ts';
+import type { Template, CreateTemplateDto, UpdateTemplateDto } from './template.types.ts';
 
-interface Template {
-  id: string;
-  user_id: string;
-  name: string;
-  content: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export class TemplateService {
+export const templateService = {
   async getAll(userId: string): Promise<Template[]> {
-    const { data, error } = await supabase
-      .from('templates')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
+    return templateRepository.findAll(userId);
+  },
 
-    if (error) {
-      throw new Error(error.message);
-    }
-
-    return data || [];
-  }
+  async getById(id: string, userId: string): Promise<Template | null> {
+    return templateRepository.findById(id, userId);
+  },
 
   async create(userId: string, name: string, content: string): Promise<Template> {
-    const { data, error } = await supabase
-      .from('templates')
-      .insert({
-        user_id: userId,
-        name,
-        content,
-      })
-      .select()
-      .single();
+    return templateRepository.create(userId, { name, content });
+  },
 
-    if (error) {
-      throw new Error(error.message);
-    }
-
-    return data;
-  }
-
-  async update(userId: string, id: string, name?: string, content?: string): Promise<Template> {
-    const updateData: { name?: string; content?: string; updated_at: string } = {
-      updated_at: new Date().toISOString(),
-    };
-
-    if (name) updateData.name = name;
-    if (content) updateData.content = content;
-
-    const { data, error } = await supabase
-      .from('templates')
-      .update(updateData)
-      .eq('id', id)
-      .eq('user_id', userId)
-      .select()
-      .single();
-
-    if (error) {
-      throw new Error(error.message);
-    }
-
-    return data;
-  }
+  async update(id: string, userId: string, name?: string, content?: string): Promise<Template> {
+    return templateRepository.update(id, userId, { name, content });
+  },
 
   async delete(userId: string, id: string): Promise<void> {
-    const { error } = await supabase
-      .from('templates')
-      .delete()
-      .eq('id', id)
-      .eq('user_id', userId);
-
-    if (error) {
-      throw new Error(error.message);
-    }
-  }
+    return templateRepository.delete(id, userId);
+  },
 
   async deleteAll(userId: string): Promise<void> {
-    const { error } = await supabase
-      .from('templates')
-      .delete()
-      .eq('user_id', userId);
+    return templateRepository.deleteAll(userId);
+  },
 
-    if (error) {
-      throw new Error(error.message);
-    }
-  }
-}
+  render(body: string, variables: Record<string, string>): string {
+    return body.replace(/\{\{(\w+)\}\}/g, (_, key) => variables[key] ?? `{{${key}}}`);
+  },
+
+  extractVariables(body: string): string[] {
+    const matches = body.matchAll(/\{\{(\w+)\}\}/g);
+    return [...new Set([...matches].map(m => m[1]))];
+  },
+};

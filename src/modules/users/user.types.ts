@@ -6,11 +6,11 @@ export interface User {
   updated_at: string;
 }
 
-export interface CreateUserInput {
+export interface CreateUserDto {
   email: string;
   name?: string;
 }
 
-export interface UpdateUserInput {
+export interface UpdateUserDto {
   name?: string;
 }

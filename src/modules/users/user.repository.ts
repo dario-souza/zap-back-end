@@ -1,7 +1,7 @@
-import { supabase } from '../../lib/supabase.js';
-import type { User, CreateUserInput, UpdateUserInput } from './user.types.js';
+import { supabase } from '../../config/supabase.ts';
+import type { User, CreateUserDto, UpdateUserDto } from './user.types.ts';
 
-export class UserRepository {
+export const userRepository = {
   async findById(id: string): Promise<User | null> {
     const { data, error } = await supabase
       .from('profiles')
@@ -11,7 +11,7 @@ export class UserRepository {
 
     if (error) return null;
     return data;
-  }
+  },
 
   async findByEmail(email: string): Promise<User | null> {
     const { data, error } = await supabase
@@ -22,9 +22,9 @@ export class UserRepository {
 
     if (error) return null;
     return data;
-  }
+  },
 
-  async create(input: CreateUserInput & { id: string }): Promise<User> {
+  async create(input: CreateUserDto & { id: string }): Promise<User> {
     const { data, error } = await supabase
       .from('profiles')
       .insert({
@@ -37,9 +37,9 @@ export class UserRepository {
 
     if (error) throw error;
     return data;
-  }
+  },
 
-  async update(id: string, input: UpdateUserInput): Promise<User> {
+  async update(id: string, input: UpdateUserDto): Promise<User> {
     const { data, error } = await supabase
       .from('profiles')
       .update({
@@ -52,5 +52,5 @@ export class UserRepository {
 
     if (error) throw error;
     return data;
-  }
-}
+  },
+};

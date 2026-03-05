@@ -1,5 +1,5 @@
-import { supabase } from '../../config/supabase.js';
-import { UpdateSessionDto } from './session.types.js';
+import { supabase } from '../../config/supabase.ts';
+import { UpdateSessionDto } from './session.types.ts';
 
 export const sessionRepository = {
   async findByUser(userId: string) {

@@ -1,82 +1,76 @@
-import { Response } from 'express';
-import { ContactService } from './contact.service.js';
-import type { AuthRequest } from '../../middleware/auth.js';
-import type { CreateContactInput, UpdateContactInput } from './contact.types.js';
-import { asyncHandler, getUserId } from '../../lib/baseController.js';
+import { Response } from 'express'
+import { contactService } from './contact.service.ts'
+import type { AuthRequest } from '../../middleware/auth.ts'
+import type { CreateContactDto, UpdateContactDto } from './contact.types.ts'
+import { asyncHandler, getUserId } from '../../lib/baseController.ts'
 
-export class ContactController {
-  private service: ContactService;
+export const contactController = {
+  getAll: asyncHandler(async (req: AuthRequest, res: Response) => {
+    const userId = getUserId(req)
+    const contacts = await contactService.getAll(userId)
+    res.json(contacts)
+  }),
 
-  constructor() {
-    this.service = new ContactService();
-  }
-
-  getAll = asyncHandler(async (req: AuthRequest, res: Response) => {
-    const userId = getUserId(req);
-    const contacts = await this.service.getAll(userId);
-    res.json(contacts);
-  });
-
-  getById = asyncHandler(async (req: AuthRequest, res: Response) => {
-    const userId = getUserId(req);
-    const { id } = req.params;
-    const contact = await this.service.getById(id, userId);
+  getById: asyncHandler(async (req: AuthRequest, res: Response) => {
+    const userId = getUserId(req)
+    const { id } = req.params
+    const contact = await contactService.getById(id, userId)
 
     if (!contact) {
-      res.status(404).json({ error: 'Contato não encontrado' });
-      return;
+      res.status(404).json({ error: 'Contato não encontrado' })
+      return
     }
 
-    res.json(contact);
-  });
+    res.json(contact)
+  }),
 
-  create = asyncHandler(async (req: AuthRequest, res: Response) => {
-    const userId = getUserId(req);
-    const input: CreateContactInput = req.body;
-    const contact = await this.service.create(userId, input);
-    res.status(201).json(contact);
-  });
+  create: asyncHandler(async (req: AuthRequest, res: Response) => {
+    const userId = getUserId(req)
+    const input: CreateContactDto = req.body
+    const contact = await contactService.create(userId, input)
+    res.status(201).json(contact)
+  }),
 
-  update = asyncHandler(async (req: AuthRequest, res: Response) => {
-    const userId = getUserId(req);
-    const { id } = req.params;
-    const input: UpdateContactInput = req.body;
-    const contact = await this.service.update(id, userId, input);
-    res.json(contact);
-  });
+  update: asyncHandler(async (req: AuthRequest, res: Response) => {
+    const userId = getUserId(req)
+    const { id } = req.params
+    const input: UpdateContactDto = req.body
+    const contact = await contactService.update(id, userId, input)
+    res.json(contact)
+  }),
 
-  delete = asyncHandler(async (req: AuthRequest, res: Response) => {
-    const userId = getUserId(req);
-    const { id } = req.params;
-    await this.service.delete(id, userId);
-    res.status(204).send();
-  });
+  delete: asyncHandler(async (req: AuthRequest, res: Response) => {
+    const userId = getUserId(req)
+    const { id } = req.params
+    await contactService.delete(id, userId)
+    res.status(204).send()
+  }),
 
-  deleteAll = asyncHandler(async (req: AuthRequest, res: Response) => {
-    const userId = getUserId(req);
-    await this.service.deleteAll(userId);
-    res.status(204).send();
-  });
+  deleteAll: asyncHandler(async (req: AuthRequest, res: Response) => {
+    const userId = getUserId(req)
+    await contactService.deleteAll(userId)
+    res.status(204).send()
+  }),
 
-  importCSV = asyncHandler(async (req: AuthRequest, res: Response) => {
-    const userId = getUserId(req);
-    const { csvContent } = req.body;
-    
+  importCSV: asyncHandler(async (req: AuthRequest, res: Response) => {
+    const userId = getUserId(req)
+    const { csvContent } = req.body
+
     if (!csvContent) {
-      res.status(400).json({ error: 'Conteúdo CSV é obrigatório' });
-      return;
+      res.status(400).json({ error: 'Conteúdo CSV é obrigatório' })
+      return
     }
 
-    const result = await this.service.importCSV(userId, csvContent);
-    res.json(result);
-  });
+    const result = await contactService.importCSV(userId, csvContent)
+    res.json(result)
+  }),
 
-  exportCSV = asyncHandler(async (req: AuthRequest, res: Response) => {
-    const userId = getUserId(req);
-    const csv = await this.service.exportCSV(userId);
-    
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', 'attachment; filename=contatos.csv');
-    res.send(csv);
-  });
+  exportCSV: asyncHandler(async (req: AuthRequest, res: Response) => {
+    const userId = getUserId(req)
+    const csv = await contactService.exportCSV(userId)
+
+    res.setHeader('Content-Type', 'text/csv')
+    res.setHeader('Content-Disposition', 'attachment; filename=contatos.csv')
+    res.send(csv)
+  }),
 }

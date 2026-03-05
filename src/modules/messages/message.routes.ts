@@ -1,21 +1,18 @@
 import { Router } from 'express';
-import { MessageController } from './message.controller.js';
-import { authenticate } from '../../middleware/auth.js';
+import { messageController } from './message.controller.ts';
+import { authenticate } from '../../middleware/auth.ts';
 
-const router = Router();
-const controller = new MessageController();
+export const messageRoutes = Router();
 
-router.use(authenticate);
+messageRoutes.use(authenticate);
 
-router.get('/', controller.getAll);
-router.get('/:id', controller.getById);
-router.post('/', controller.create);
-router.post('/bulk', controller.createBulk);
-router.post('/with-reminder', controller.createWithReminder);
-router.post('/test', controller.sendTest);
-router.put('/:id', controller.update);
-router.delete('/:id', controller.delete);
-router.delete('/', controller.deleteAll);
-router.post('/:id/send', controller.sendNow);
-
-export default router;
+messageRoutes.get('/', messageController.getAll);
+messageRoutes.get('/:id', messageController.getById);
+messageRoutes.post('/', messageController.create);
+messageRoutes.post('/bulk', messageController.createBulk);
+messageRoutes.post('/with-reminder', messageController.createWithReminder);
+messageRoutes.post('/test', messageController.sendTest);
+messageRoutes.put('/:id', messageController.update);
+messageRoutes.delete('/:id', messageController.delete);
+messageRoutes.delete('/', messageController.deleteAll);
+messageRoutes.post('/:id/send', messageController.sendNow);

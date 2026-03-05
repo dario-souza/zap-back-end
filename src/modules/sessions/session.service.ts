@@ -1,5 +1,5 @@
-import { sessionRepository } from './session.repository.js';
-import { wahaService } from '../../services/waha.service.js';
+import { sessionRepository } from './session.repository.ts';
+import { wahaService } from '../../services/waha.service.ts';
 
 export const sessionService = {
   generateSessionName(userId: string): string {
@@ -42,7 +42,7 @@ export const sessionService = {
     console.log('[Session] Sessão deletada. Pronto para criar nova.');
   },
 
-  async getQRCode(userId: string, retryCount = 0) {
+  async getQRCode(userId: string, retryCount = 0): Promise<{ qr?: string | null; connected?: boolean; message?: string; status?: string; isPairingCode?: boolean }> {
     const maxRetries = 2;
     
     try {

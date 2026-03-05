@@ -1,7 +1,7 @@
 import { Response } from 'express';
-import { WahaService } from '../../services/waha.service.js';
-import type { AuthRequest } from '../../middleware/auth.js';
-import { asyncHandler } from '../../lib/baseController.js';
+import { WahaService } from '../../services/waha.service.ts';
+import type { AuthRequest } from '../../middleware/auth.ts';
+import { asyncHandler } from '../../lib/baseController.ts';
 
 export class WahaController {
   private service: WahaService;

@@ -1,19 +1,16 @@
 import { Router } from 'express';
-import { ContactController } from './contact.controller.js';
-import { authenticate } from '../../middleware/auth.js';
+import { contactController } from './contact.controller.ts';
+import { authenticate } from '../../middleware/auth.ts';
 
-const router = Router();
-const controller = new ContactController();
+export const contactRoutes = Router();
 
-router.use(authenticate);
+contactRoutes.use(authenticate);
 
-router.get('/', controller.getAll);
-router.get('/:id', controller.getById);
-router.post('/', controller.create);
-router.post('/import', controller.importCSV);
-router.get('/export', controller.exportCSV);
-router.put('/:id', controller.update);
-router.delete('/:id', controller.delete);
-router.delete('/', controller.deleteAll);
-
-export default router;
+contactRoutes.get('/', contactController.getAll);
+contactRoutes.get('/:id', contactController.getById);
+contactRoutes.post('/', contactController.create);
+contactRoutes.post('/import', contactController.importCSV);
+contactRoutes.get('/export', contactController.exportCSV);
+contactRoutes.put('/:id', contactController.update);
+contactRoutes.delete('/:id', contactController.delete);
+contactRoutes.delete('/', contactController.deleteAll);

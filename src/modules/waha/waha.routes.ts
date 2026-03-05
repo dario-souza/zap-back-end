@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import { WahaController } from './waha.controller.js';
-import { authenticate } from '../../middleware/auth.js';
+import { WahaController } from './waha.controller.ts';
+import { authenticate } from '../../middleware/auth.ts';
 
 const router = Router();
 const controller = new WahaController();

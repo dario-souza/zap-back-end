@@ -1,11 +1,10 @@
 import { Router } from 'express';
-import { UserController } from './user.controller.js';
-import { authenticate } from '../../middleware/auth.js';
+import { userController } from './user.controller.ts';
+import { authenticate } from '../../middleware/auth.ts';
 
-const router = Router();
-const controller = new UserController();
+export const userRoutes = Router();
 
-router.get('/profile', authenticate, controller.getProfile);
-router.put('/profile', authenticate, controller.updateProfile);
+userRoutes.use(authenticate);
 
-export default router;
+userRoutes.get('/profile', userController.getProfile);
+userRoutes.put('/profile', userController.updateProfile);

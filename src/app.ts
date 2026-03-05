@@ -3,13 +3,13 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import cors from 'cors'
 
-import userRoutes from './modules/users/user.routes.ts'
-import messageRoutes from './modules/messages/message.routes.ts'
-import contactRoutes from './modules/contacts/contact.routes.ts'
-import { sessionRoutes } from './modules/sessions/session.routes.ts'
-import templateRoutes from './modules/templates/template.routes.ts'
-import confirmationRoutes from './modules/confirmations/confirmation.routes.ts'
 import { authRoutes } from './modules/auth/auth.routes.ts'
+import { userRoutes } from './modules/users/user.routes.ts'
+import { messageRoutes } from './modules/messages/message.routes.ts'
+import { contactRoutes } from './modules/contacts/contact.routes.ts'
+import { sessionRoutes } from './modules/sessions/session.routes.ts'
+import { templateRoutes } from './modules/templates/template.routes.ts'
+import { confirmationRoutes } from './modules/confirmations/confirmation.routes.ts'
 import { errorHandler } from './lib/baseController.ts'
 import { env } from './config/env.ts'
 
@@ -19,10 +19,10 @@ const __dirname = path.dirname(__filename)
 const app = express()
 
 const corsOptions: cors.CorsOptions = {
-  origin: '*',
+  origin: true,
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
 }
 
 app.use(cors(corsOptions))

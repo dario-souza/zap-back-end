@@ -1,27 +1,19 @@
-import { MessageRepository } from './message.repository.js';
-import { ContactRepository } from '../contacts/contact.repository.js';
-import { sendMessageJob, sendReminderJob, scheduleRecurringJob } from '../../queues/messageQueue.js';
-import type { Message, CreateMessageInput, UpdateMessageInput } from './message.types.js';
+import { messageRepository } from './message.repository.ts';
+import { contactRepository } from '../contacts/contact.repository.ts';
+import { sendMessageJob, sendReminderJob, scheduleRecurringJob } from '../../queues/messageQueue.ts';
+import type { Message, CreateMessageDto, UpdateMessageDto, RecurrenceType, MessageStatus } from './message.types.ts';
 
-export class MessageService {
-  private repository: MessageRepository;
-  private contactRepository: ContactRepository;
-
-  constructor() {
-    this.repository = new MessageRepository();
-    this.contactRepository = new ContactRepository();
-  }
-
+export const messageService = {
   async getAll(userId: string): Promise<Message[]> {
-    return this.repository.findAll(userId);
-  }
+    return messageRepository.findAll(userId);
+  },
 
   async getById(id: string, userId: string): Promise<Message | null> {
-    return this.repository.findById(id, userId);
-  }
+    return messageRepository.findById(id, userId);
+  },
 
-  async create(userId: string, input: CreateMessageInput): Promise<Message> {
-    const message = await this.repository.create(userId, input);
+  async create(userId: string, input: CreateMessageDto): Promise<Message> {
+    const message = await messageRepository.create(userId, input);
 
     if (message.status === 'SCHEDULED' && message.scheduled_at) {
       await sendMessageJob({
@@ -57,22 +49,22 @@ export class MessageService {
     }
 
     return message;
-  }
+  },
 
-  async update(id: string, userId: string, input: UpdateMessageInput): Promise<Message> {
-    return this.repository.update(id, userId, input);
-  }
+  async update(id: string, userId: string, input: UpdateMessageDto): Promise<Message> {
+    return messageRepository.update(id, userId, input);
+  },
 
   async delete(id: string, userId: string): Promise<void> {
-    return this.repository.delete(id, userId);
-  }
+    return messageRepository.delete(id, userId);
+  },
 
   async deleteAll(userId: string): Promise<void> {
-    return this.repository.deleteAll(userId);
-  }
+    return messageRepository.deleteAll(userId);
+  },
 
   async sendNow(id: string, userId: string): Promise<Message> {
-    const message = await this.repository.findById(id, userId);
+    const message = await messageRepository.findById(id, userId);
     
     if (!message) {
       throw new Error('Mensagem não encontrada');
@@ -85,8 +77,8 @@ export class MessageService {
       userId,
     });
 
-    return this.repository.update(id, userId, { status: 'PENDING' });
-  }
+    return messageRepository.update(id, userId, { status: 'PENDING' });
+  },
 
   async createBulk(
     userId: string, 
@@ -101,7 +93,7 @@ export class MessageService {
 
     for (const contactId of contactIds) {
       try {
-        const contact = await this.contactRepository.findById(contactId, userId);
+        const contact = await contactRepository.findById(contactId, userId);
         if (!contact) {
           failed++;
           continue;
@@ -109,11 +101,11 @@ export class MessageService {
 
         await this.create(userId, {
           content,
-          contact_id: contactId,
           phone: contact.phone,
+          contact_id: contactId,
           scheduled_at: scheduledAt,
           status: sendNow ? 'PENDING' : 'SCHEDULED',
-          recurrence_type: recurrenceType || 'NONE',
+          recurrence_type: (recurrenceType || 'NONE') as RecurrenceType,
         });
         success++;
       } catch (error) {
@@ -123,7 +115,7 @@ export class MessageService {
     }
 
     return { success, failed, total: contactIds.length };
-  }
+  },
 
   async createWithReminder(
     userId: string,
@@ -132,20 +124,25 @@ export class MessageService {
     scheduledAt: string,
     reminderDays: number
   ): Promise<Message> {
+    const contact = await contactRepository.findById(contactId, userId);
+    if (!contact) {
+      throw new Error('Contato não encontrado');
+    }
+
     return this.create(userId, {
       content,
+      phone: contact.phone,
       contact_id: contactId,
       scheduled_at: scheduledAt,
-      status: 'SCHEDULED',
+      status: 'SCHEDULED' as MessageStatus,
       reminder_days: reminderDays,
       is_reminder: false,
     });
-  }
+  },
 
   async sendTest(userId: string, phone: string, message: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
     try {
-      const { WahaService } = await import('../../services/waha.service.js');
-      const wahaService = new WahaService();
+      const { wahaService } = await import('../../services/waha.service.ts');
       
       const result = await wahaService.sendMessage(userId, phone, message);
       
@@ -157,5 +154,5 @@ export class MessageService {
     } catch (error) {
       return { success: false, error: String(error) };
     }
-  }
-}
+  },
+};

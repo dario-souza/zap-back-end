@@ -21,7 +21,7 @@ export interface Message {
   next_send_at?: string;
 }
 
-export interface CreateMessageInput {
+export interface CreateMessageDto {
   phone: string;
   content: string;
   contact_id?: string;
@@ -29,10 +29,20 @@ export interface CreateMessageInput {
   recurrence_type?: RecurrenceType;
   recurrence_cron?: string;
   reminder_days?: number;
+  is_reminder?: boolean;
+  status?: MessageStatus;
 }
 
-export interface UpdateMessageInput {
+export interface UpdateMessageDto {
   content?: string;
   status?: MessageStatus;
   scheduled_at?: string;
+}
+
+export interface SendMessageJobData {
+  messageId: string;
+  phone: string;
+  content: string;
+  scheduledAt?: string;
+  userId: string;
 }

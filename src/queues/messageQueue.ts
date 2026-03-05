@@ -1,21 +1,8 @@
 import { Queue, QueueEvents } from 'bullmq';
-import { getRedisConnection, type RedisConnection } from '../lib/redis.js';
-
-const getRedisUrl = (): RedisConnection => {
-  return getRedisConnection();
-};
-
-let cachedRedisUrl: RedisConnection | null = null;
-
-const getLazyRedisUrl = () => {
-  if (!cachedRedisUrl) {
-    cachedRedisUrl = getRedisUrl();
-  }
-  return cachedRedisUrl;
-};
+import { redisConnection } from '../config/redis.ts';
 
 export const messageQueue = new Queue('message-queue', {
-  connection: getLazyRedisUrl() as any,
+  connection: redisConnection as any,
   defaultJobOptions: {
     removeOnComplete: {
       count: 1000,
@@ -27,7 +14,7 @@ export const messageQueue = new Queue('message-queue', {
 });
 
 export const queueEvents = new QueueEvents('message-queue', {
-  connection: getLazyRedisUrl() as any,
+  connection: redisConnection as any,
 });
 
 export const sendMessageJob = async (data: {

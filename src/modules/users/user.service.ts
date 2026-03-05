@@ -1,18 +1,12 @@
-import { UserRepository } from './user.repository.js';
-import type { User, UpdateUserInput } from './user.types.js';
+import { userRepository } from './user.repository.ts';
+import type { User, UpdateUserDto } from './user.types.ts';
 
-export class UserService {
-  private repository: UserRepository;
-
-  constructor() {
-    this.repository = new UserRepository();
-  }
-
+export const userService = {
   async getProfile(userId: string): Promise<User | null> {
-    return this.repository.findById(userId);
-  }
+    return userRepository.findById(userId);
+  },
 
-  async updateProfile(userId: string, input: UpdateUserInput): Promise<User> {
-    return this.repository.update(userId, input);
-  }
-}
+  async updateProfile(userId: string, input: UpdateUserDto): Promise<User> {
+    return userRepository.update(userId, input);
+  },
+};
