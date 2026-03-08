@@ -13,15 +13,18 @@ export const messageService = {
   },
 
   async create(userId: string, input: CreateMessageDto): Promise<Message> {
-    const message = await messageRepository.create(userId, input);
+    if (input.scheduled_at) {
+      const message = await messageRepository.create(userId, {
+        ...input,
+        status: 'SCHEDULED',
+      });
 
-    if (message.status === 'SCHEDULED' && message.scheduled_at) {
       await sendMessageJob({
-        messageId: message.id,
         phone: message.phone,
         content: message.content,
         scheduledAt: message.scheduled_at,
         userId,
+        contactId: message.contact_id,
       });
 
       if (input.reminder_days && input.reminder_days > 0) {
@@ -30,25 +33,45 @@ export const messageService = {
 
         if (reminderDate > new Date()) {
           await sendReminderJob({
-            messageId: message.id,
             phone: message.phone,
             content: `Lembrete: Você tem uma mensagem agendada para ${message.scheduled_at}`,
             reminderDate: reminderDate.toISOString(),
           });
         }
       }
+
+      if (input.recurrence_type && input.recurrence_type !== 'NONE' && input.recurrence_cron) {
+        await scheduleRecurringJob({
+          phone: message.phone,
+          content: message.content,
+          cron: input.recurrence_cron,
+        });
+      }
+
+      return message;
     }
 
-    if (input.recurrence_type && input.recurrence_type !== 'NONE' && input.recurrence_cron) {
-      await scheduleRecurringJob({
-        messageId: message.id,
-        phone: message.phone,
-        content: message.content,
-        cron: input.recurrence_cron,
-      });
-    }
+    await sendMessageJob({
+      phone: input.phone,
+      content: input.content,
+      userId,
+      contactId: input.contact_id,
+    });
 
-    return message;
+    return {
+      id: 'pending',
+      user_id: userId,
+      phone: input.phone,
+      content: input.content,
+      status: 'PENDING' as MessageStatus,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      contact_id: input.contact_id,
+      recurrence_type: input.recurrence_type || 'NONE',
+      reminder_days: input.reminder_days || 0,
+      is_reminder: input.is_reminder || false,
+      reminder_sent: false,
+    };
   },
 
   async update(id: string, userId: string, input: UpdateMessageDto): Promise<Message> {
@@ -71,10 +94,10 @@ export const messageService = {
     }
 
     await sendMessageJob({
-      messageId: message.id,
       phone: message.phone,
       content: message.content,
       userId,
+      contactId: message.contact_id,
     });
 
     return messageRepository.update(id, userId, { status: 'PENDING' });
@@ -99,14 +122,23 @@ export const messageService = {
           continue;
         }
 
-        await this.create(userId, {
-          content,
-          phone: contact.phone,
-          contact_id: contactId,
-          scheduled_at: scheduledAt,
-          status: sendNow ? 'PENDING' : 'SCHEDULED',
-          recurrence_type: (recurrenceType || 'NONE') as RecurrenceType,
-        });
+        if (scheduledAt) {
+          await this.create(userId, {
+            content,
+            phone: contact.phone,
+            contact_id: contactId,
+            scheduled_at: scheduledAt,
+            status: 'SCHEDULED',
+            recurrence_type: (recurrenceType || 'NONE') as RecurrenceType,
+          });
+        } else {
+          await sendMessageJob({
+            phone: contact.phone,
+            content,
+            userId,
+            contactId,
+          });
+        }
         success++;
       } catch (error) {
         console.error('Erro ao criar mensagem para contato:', contactId, error);
@@ -146,11 +178,11 @@ export const messageService = {
       
       const result = await wahaService.sendMessage(userId, phone, message);
       
-      if (result) {
-        return { success: true };
+      if (result.success) {
+        return { success: true, messageId: result.messageId };
       }
       
-      return { success: false, error: 'Falha ao enviar mensagem' };
+      return { success: false, error: result.error || 'Falha ao enviar mensagem' };
     } catch (error) {
       return { success: false, error: String(error) };
     }

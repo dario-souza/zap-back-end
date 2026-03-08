@@ -3,6 +3,27 @@ import { supabase } from '../config/supabase.ts'
 import { wahaService } from '../services/waha.service.ts'
 import { redisConnection } from '../config/redis.ts'
 
+const replaceVariables = (content: string, contact: { name?: string; phone?: string } | null): string => {
+  if (!contact) return content
+  
+  let result = content
+  
+  result = result.replace(/\{\{nome\}\}/gi, contact.name || '')
+  result = result.replace(/\{\{name\}\}/gi, contact.name || '')
+  result = result.replace(/\{\{phone\}\}/gi, contact.phone || '')
+  result = result.replace(/\{\{telefone\}\}/gi, contact.phone || '')
+  
+  return result
+}
+
+interface SendMessageJobData {
+  phone: string
+  content: string
+  userId: string
+  contactId?: string
+  scheduledAt?: string
+}
+
 let worker: Worker | null = null
 
 const startWorker = async () => {
@@ -11,30 +32,56 @@ const startWorker = async () => {
 
     worker = new Worker(
       'message-queue',
-      async (job: Job) => {
-        const { messageId, phone, content, userId } = job.data
-        console.log(`[Worker] Processando mensagem ${messageId}`)
+      async (job: Job<SendMessageJobData>) => {
+        const { phone, content, userId, contactId, scheduledAt } = job.data
+        console.log(`[Worker] Enviando mensagem para ${phone}`)
 
         try {
-          const sent = await wahaService.sendMessage(userId, phone, content)
+          let finalContent = content
+          
+          if (contactId) {
+            const { data: contact } = await supabase
+              .from('contacts')
+              .select('name, phone')
+              .eq('id', contactId)
+              .single()
+            
+            if (contact) {
+              finalContent = replaceVariables(content, contact)
+              console.log(`[Worker] Mensagem com variáveis substituídas: "${finalContent}"`)
+            }
+          }
 
-          if (sent) {
-            await supabase
+          const result = await wahaService.sendMessage(userId, phone, finalContent)
+
+          if (result.success && result.messageId) {
+            const { data: message, error } = await supabase
               .from('messages')
-              .update({
+              .insert({
+                user_id: userId,
+                phone: phone.replace('@c.us', '').replace('@g.us', ''),
+                content: finalContent,
                 status: 'SENT',
                 sent_at: new Date().toISOString(),
+                scheduled_at: scheduledAt || null,
+                contact_id: contactId || null,
+                wa_message_id: result.messageId,
               })
-              .eq('id', messageId)
+              .select()
+              .single()
 
-            console.log(`[Worker] Mensagem ${messageId} enviada com sucesso`)
+            if (error) {
+              console.error('[Worker] Erro ao salvar mensagem:', error)
+              throw new Error('Falha ao salvar mensagem no banco')
+            }
+
+            console.log(`[Worker] Mensagem enviada e salva com ID: ${message?.id}, WAHA ID: ${result.messageId}`)
+          } else {
+            console.error('[Worker] Falha ao enviar via WAHA:', result.error)
+            throw new Error(result.error || 'Falha ao enviar mensagem')
           }
         } catch (error) {
-          console.error(`[Worker] Erro ao enviar mensagem ${messageId}:`, error)
-          await supabase
-            .from('messages')
-            .update({ status: 'FAILED' })
-            .eq('id', messageId)
+          console.error(`[Worker] Erro ao enviar mensagem para ${phone}:`, error)
           throw error
         }
       },

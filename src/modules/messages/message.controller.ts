@@ -26,7 +26,15 @@ export const messageController = {
 
   create: asyncHandler(async (req: AuthRequest, res: Response) => {
     const userId = getUserId(req);
-    const input: CreateMessageDto = req.body;
+    const { chatId, body, contactId, templateId, scheduledAt } = req.body;
+    
+    const input: CreateMessageDto = {
+      phone: chatId?.replace('@c.us', '').replace('@g.us', '') || '',
+      content: body || '',
+      contact_id: contactId,
+      scheduled_at: scheduledAt,
+    };
+    
     const message = await messageService.create(userId, input);
     res.status(201).json(message);
   }),

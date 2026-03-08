@@ -23,6 +23,7 @@ export const sendMessageJob = async (data: {
   content: string;
   scheduledAt?: string;
   userId?: string;
+  contactId?: string;
 }) => {
   const delay = data.scheduledAt
     ? new Date(data.scheduledAt).getTime() - Date.now()

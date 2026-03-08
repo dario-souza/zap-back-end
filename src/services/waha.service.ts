@@ -87,11 +87,11 @@ export class WahaService {
     return `user_${userId.substring(0, 8)}`;
   }
 
-  async sendMessage(userId: string, phone: string, message: string): Promise<boolean> {
+  async sendMessage(userId: string, phone: string, message: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
     const session = await this.getUserSession(userId);
     if (!session) {
       console.error('[WAHA] Sessão do usuário não encontrada');
-      return false;
+      return { success: false, error: 'Sessão não encontrada' };
     }
 
     try {
@@ -110,15 +110,15 @@ export class WahaService {
       if (!response.ok) {
         const error = await response.text();
         console.error('[WAHA] Erro ao enviar mensagem:', error);
-        return false;
+        return { success: false, error };
       }
 
-      const data = await response.json();
+      const data = await response.json() as { key?: { id?: string } };
       console.log('[WAHA] Mensagem enviada:', data);
-      return true;
+      return { success: true, messageId: data.key?.id };
     } catch (error) {
       console.error('[WAHA] Erro na requisição:', error);
-      return false;
+      return { success: false, error: String(error) };
     }
   }
 
