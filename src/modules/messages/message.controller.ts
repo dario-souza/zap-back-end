@@ -54,6 +54,13 @@ export const messageController = {
     res.status(204).send();
   }),
 
+  cancel: asyncHandler(async (req: AuthRequest, res: Response) => {
+    const userId = getUserId(req);
+    const { id } = req.params;
+    const message = await messageService.cancel(id, userId);
+    res.json(message);
+  }),
+
   deleteAll: asyncHandler(async (req: AuthRequest, res: Response) => {
     const userId = getUserId(req);
     await messageService.deleteAll(userId);

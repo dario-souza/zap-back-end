@@ -16,3 +16,4 @@ messageRoutes.put('/:id', messageController.update);
 messageRoutes.delete('/:id', messageController.delete);
 messageRoutes.delete('/', messageController.deleteAll);
 messageRoutes.post('/:id/send', messageController.sendNow);
+messageRoutes.post('/:id/cancel', messageController.cancel);

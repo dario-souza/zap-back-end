@@ -19,7 +19,8 @@ export const messageService = {
         status: 'SCHEDULED',
       });
 
-      await sendMessageJob({
+      const job = await sendMessageJob({
+        messageId: message.id,
         phone: message.phone,
         content: message.content,
         scheduledAt: message.scheduled_at,
@@ -27,12 +28,15 @@ export const messageService = {
         contactId: message.contact_id,
       });
 
-      if (input.reminder_days && input.reminder_days > 0) {
+      await messageRepository.updateJobId(message.id, userId, job.id || null);
+
+      if (input.reminder_days && input.reminder_days > 0 && message.scheduled_at) {
         const reminderDate = new Date(message.scheduled_at);
         reminderDate.setDate(reminderDate.getDate() - input.reminder_days);
 
         if (reminderDate > new Date()) {
           await sendReminderJob({
+            messageId: message.id,
             phone: message.phone,
             content: `Lembrete: Você tem uma mensagem agendada para ${message.scheduled_at}`,
             reminderDate: reminderDate.toISOString(),
@@ -42,6 +46,7 @@ export const messageService = {
 
       if (input.recurrence_type && input.recurrence_type !== 'NONE' && input.recurrence_cron) {
         await scheduleRecurringJob({
+          messageId: message.id,
           phone: message.phone,
           content: message.content,
           cron: input.recurrence_cron,
@@ -51,27 +56,22 @@ export const messageService = {
       return message;
     }
 
-    await sendMessageJob({
-      phone: input.phone,
-      content: input.content,
-      userId,
-      contactId: input.contact_id,
+    const message = await messageRepository.create(userId, {
+      ...input,
+      status: 'PENDING',
     });
 
-    return {
-      id: 'pending',
-      user_id: userId,
-      phone: input.phone,
-      content: input.content,
-      status: 'PENDING' as MessageStatus,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      contact_id: input.contact_id,
-      recurrence_type: input.recurrence_type || 'NONE',
-      reminder_days: input.reminder_days || 0,
-      is_reminder: input.is_reminder || false,
-      reminder_sent: false,
-    };
+    const job = await sendMessageJob({
+      messageId: message.id,
+      phone: message.phone,
+      content: message.content,
+      userId,
+      contactId: message.contact_id,
+    });
+
+    await messageRepository.updateJobId(message.id, userId, job.id || null);
+
+    return message;
   },
 
   async update(id: string, userId: string, input: UpdateMessageDto): Promise<Message> {
@@ -86,6 +86,20 @@ export const messageService = {
     return messageRepository.deleteAll(userId);
   },
 
+  async cancel(id: string, userId: string): Promise<Message> {
+    const message = await messageRepository.findById(id, userId);
+    
+    if (!message) {
+      throw new Error('Mensagem não encontrada');
+    }
+
+    if (message.status !== 'SCHEDULED' && message.status !== 'PENDING') {
+      throw new Error('Apenas mensagens pendentes ou agendadas podem ser canceladas');
+    }
+
+    return messageRepository.update(id, userId, { status: 'CANCELLED' as MessageStatus });
+  },
+
   async sendNow(id: string, userId: string): Promise<Message> {
     const message = await messageRepository.findById(id, userId);
     
@@ -94,6 +108,7 @@ export const messageService = {
     }
 
     await sendMessageJob({
+      messageId: message.id,
       phone: message.phone,
       content: message.content,
       userId,
@@ -132,7 +147,15 @@ export const messageService = {
             recurrence_type: (recurrenceType || 'NONE') as RecurrenceType,
           });
         } else {
+          const message = await messageRepository.create(userId, {
+            content,
+            phone: contact.phone,
+            contact_id: contactId,
+            status: 'PENDING',
+          });
+          
           await sendMessageJob({
+            messageId: message.id,
             phone: contact.phone,
             content,
             userId,

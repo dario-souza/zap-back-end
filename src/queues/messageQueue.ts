@@ -18,7 +18,7 @@ export const queueEvents = new QueueEvents('message-queue', {
 });
 
 export const sendMessageJob = async (data: {
-  messageId: string;
+  messageId?: string;
   phone: string;
   content: string;
   scheduledAt?: string;

@@ -19,6 +19,7 @@ export interface Message {
   parent_message_id?: string;
   reminder_sent: boolean;
   next_send_at?: string;
+job_id?: string;
 }
 
 export interface CreateMessageDto {

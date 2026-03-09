@@ -1,5 +1,5 @@
 import { supabase } from '../../config/supabase.ts';
-import type { Message, CreateMessageDto, UpdateMessageDto } from './message.types.ts';
+import type { Message, CreateMessageDto, UpdateMessageDto, MessageStatus } from './message.types.ts';
 
 export const messageRepository = {
   async findAll(userId: string): Promise<Message[]> {
@@ -43,6 +43,7 @@ export const messageRepository = {
         reminder_days: input.reminder_days || 0,
         is_reminder: false,
         next_send_at: input.scheduled_at,
+        job_id: null,
       })
       .select()
       .single();
@@ -51,11 +52,43 @@ export const messageRepository = {
     return data;
   },
 
-  async update(id: string, userId: string, input: UpdateMessageDto): Promise<Message> {
+  async update(id: string, userId: string, input: Partial<UpdateMessageDto> & { job_id?: string }): Promise<Message> {
     const { data, error } = await supabase
       .from('messages')
       .update({
         ...input,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .eq('user_id', userId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  async updateStatus(id: string, userId: string, status: MessageStatus): Promise<Message> {
+    const { data, error } = await supabase
+      .from('messages')
+      .update({
+        status,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .eq('user_id', userId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  async updateJobId(id: string, userId: string, jobId: string | null): Promise<Message> {
+    const { data, error } = await supabase
+      .from('messages')
+      .update({
+        job_id: jobId,
         updated_at: new Date().toISOString(),
       })
       .eq('id', id)
