@@ -1,109 +1,99 @@
-import { Worker, Job } from 'bullmq'
-import { supabase } from '../config/supabase.ts'
-import { wahaService } from '../services/waha.service.ts'
-import { redisConnection } from '../config/redis.ts'
+import { Worker, Job } from 'bullmq';
+import { supabase } from '../config/supabase.ts';
+import { wahaService } from '../services/waha.service.ts';
+import { redisConnection } from '../config/redis.ts';
 
-const WHATSAPP_MIN_DELAY_BETWEEN_MESSAGES = parseInt(process.env.WHATSAPP_MIN_DELAY_BETWEEN_MESSAGES || '2000')
-const WHATSAPP_MAX_DELAY_BETWEEN_MESSAGES = parseInt(process.env.WHATSAPP_MAX_DELAY_BETWEEN_MESSAGES || '5000')
-const WORKER_CONCURRENCY = parseInt(process.env.WORKER_CONCURRENCY || '10')
-
-const replaceVariables = (content: string, contact: { name?: string; phone?: string } | null): string => {
-  if (!contact) return content
-  
-  let result = content
-  
-  result = result.replace(/\{\{nome\}\}/gi, contact.name || '')
-  result = result.replace(/\{\{name\}\}/gi, contact.name || '')
-  result = result.replace(/\{\{phone\}\}/gi, contact.phone || '')
-  result = result.replace(/\{\{telefone\}\}/gi, contact.phone || '')
-  
-  return result
-}
-
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
-
-const getRandomDelay = (min: number, max: number): number => {
-  return Math.floor(Math.random() * (max - min + 1)) + min
-}
+const WHATSAPP_MIN_DELAY = 2000;
+const WHATSAPP_MAX_DELAY = 5000;
+const WORKER_CONCURRENCY = 1;
 
 interface SendMessageJobData {
-  messageId?: string
-  phone: string
-  content: string
-  userId: string
-  contactId?: string
-  scheduledAt?: string
+  messageId?: string;
+  phone: string;
+  content: string;
+  userId: string;
+  contactId?: string;
+  scheduledAt?: string;
 }
 
-let worker: Worker | null = null
-
-const userDelays = new Map<string, number>()
-
-const canSendMessage = (userId: string): boolean => {
-  const lastSend = userDelays.get(userId)
-  if (!lastSend) return true
-  
-  const now = Date.now()
-  const timeSinceLastSend = now - lastSend
-  const minDelay = WHATSAPP_MIN_DELAY_BETWEEN_MESSAGES
-  
-  return timeSinceLastSend >= minDelay
+interface SendReminderJobData {
+  messageId: string;
+  phone: string;
+  content: string;
+  reminderDate: string;
+  userId: string;
 }
 
-const getWaitTime = (userId: string): number => {
-  const lastSend = userDelays.get(userId)
-  if (!lastSend) return 0
-  
-  const now = Date.now()
-  const timeSinceLastSend = now - lastSend
-  const waitTime = WHATSAPP_MIN_DELAY_BETWEEN_MESSAGES - timeSinceLastSend
-  
-  return Math.max(0, waitTime)
+interface ScheduleRecurringJobData {
+  messageId: string;
+  phone: string;
+  content: string;
+  cron: string;
+  userId: string;
 }
+
+type AnyJobData = SendMessageJobData | SendReminderJobData | ScheduleRecurringJobData;
+
+const replaceVariables = (content: string, contact: { name?: string; phone?: string } | null): string => {
+  if (!contact) return content;
+  
+  let result = content;
+  result = result.replace(/\{\{nome\}\}/gi, contact.name || '');
+  result = result.replace(/\{\{name\}\}/gi, contact.name || '');
+  result = result.replace(/\{\{phone\}\}/gi, contact.phone || '');
+  result = result.replace(/\{\{telefone\}\}/gi, contact.phone || '');
+  
+  return result;
+};
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+const getRandomDelay = (min: number, max: number): number => {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+};
+
+let worker: Worker | null = null;
 
 const startWorker = async () => {
   try {
-    console.log('[Worker] Iniciando worker de mensagens...')
-    console.log(`[Worker] Configuração: delay ${WHATSAPP_MIN_DELAY_BETWEEN_MESSAGES}-${WHATSAPP_MAX_DELAY_BETWEEN_MESSAGES}ms entre msgs, concorrência: ${WORKER_CONCURRENCY}`)
+    console.log('[Worker] Iniciando worker...');
+    console.log(`[Worker] Delay: ${WHATSAPP_MIN_DELAY}-${WHATSAPP_MAX_DELAY}ms`);
+    console.log(`[Worker] Concorrência: ${WORKER_CONCURRENCY}`);
+    console.log(`[Worker] Fila: whatsapp-messages`);
 
-    worker = new Worker(
-      'message-queue',
-      async (job: Job<SendMessageJobData>) => {
-        const { messageId, phone, content, userId, contactId, scheduledAt } = job.data
-        
-        const waitTime = getWaitTime(userId)
-        if (waitTime > 0) {
-          console.log(`[Worker] Usuário ${userId.substring(0, 8)} em espera, aguardando ${waitTime}ms`)
-          await sleep(waitTime)
-        }
-        
-        console.log(`[Worker] Enviando mensagem para ${phone} (usuário: ${userId.substring(0, 8)})`)
+    worker = new Worker<AnyJobData>(
+      'whatsapp-messages',
+      async (job: Job<AnyJobData>) => {
+        console.log(`[Worker] Job ${job.id} - Tipo: ${job.name}`);
 
-        try {
-          let finalContent = content
-          
+        if (job.name === 'send-message') {
+          const data = job.data as SendMessageJobData;
+          const { messageId, phone, content, userId, contactId, scheduledAt } = data;
+
+          const humanDelay = getRandomDelay(WHATSAPP_MIN_DELAY, WHATSAPP_MAX_DELAY);
+          console.log(`[Worker] Delay humano: ${humanDelay}ms para user ${userId.substring(0, 8)}`);
+          await sleep(humanDelay);
+
+          let finalContent = content;
+
           if (contactId) {
             const { data: contact } = await supabase
               .from('contacts')
               .select('name, phone')
               .eq('id', contactId)
-              .single()
+              .single();
             
             if (contact) {
-              finalContent = replaceVariables(content, contact)
-              console.log(`[Worker] Mensagem com variáveis substituídas: "${finalContent}"`)
+              finalContent = replaceVariables(content, contact);
             }
           }
 
-          await sleep(getRandomDelay(WHATSAPP_MIN_DELAY_BETWEEN_MESSAGES, WHATSAPP_MAX_DELAY_BETWEEN_MESSAGES))
-
-          const result = await wahaService.sendMessage(userId, phone, finalContent)
-
-          userDelays.set(userId, Date.now())
+          console.log(`[Worker] Enviando para ${phone}`);
+          const result = await wahaService.sendMessage(userId, phone, finalContent);
 
           if (result.success && result.messageId) {
             if (messageId) {
-              const { data: message, error } = await supabase
+              await supabase
                 .from('messages')
                 .update({
                   status: 'SENT',
@@ -112,78 +102,94 @@ const startWorker = async () => {
                   updated_at: new Date().toISOString(),
                 })
                 .eq('id', messageId)
-                .eq('user_id', userId)
-                .select()
-                .single()
-
-              if (error) {
-                console.error('[Worker] Erro ao atualizar mensagem:', error)
-              } else {
-                console.log(`[Worker] Mensagem atualizada com ID: ${message?.id}, WAHA ID: ${result.messageId}`)
-              }
-            } else {
-              const { data: message, error } = await supabase
-                .from('messages')
-                .insert({
-                  user_id: userId,
-                  phone: phone.replace('@c.us', '').replace('@g.us', ''),
-                  content: finalContent,
-                  status: 'SENT',
-                  sent_at: new Date().toISOString(),
-                  scheduled_at: scheduledAt || null,
-                  contact_id: contactId || null,
-                  wa_message_id: result.messageId,
-                })
-                .select()
-                .single()
-
-              if (error) {
-                console.error('[Worker] Erro ao salvar mensagem:', error)
-                throw new Error('Falha ao salvar mensagem no banco')
-              }
-
-              console.log(`[Worker] Mensagem salva com ID: ${message?.id}, WAHA ID: ${result.messageId}`)
+                .eq('user_id', userId);
             }
+            console.log(`[Worker] Sucesso! WAHA ID: ${result.messageId}`);
+            return { success: true, waMessageId: result.messageId };
           } else {
-            console.error('[Worker] Falha ao enviar via WAHA:', result.error)
-            throw new Error(result.error || 'Falha ao enviar mensagem')
+            console.error(`[Worker] Falha: ${result.error}`);
+            if (messageId) {
+              await supabase
+                .from('messages')
+                .update({ status: 'FAILED', updated_at: new Date().toISOString() })
+                .eq('id', messageId)
+                .eq('user_id', userId);
+            }
+            throw new Error(result.error || 'Falha ao enviar');
           }
-        } catch (error) {
-          console.error(`[Worker] Erro ao enviar mensagem para ${phone}:`, error)
-          throw error
         }
+
+        if (job.name === 'send-reminder') {
+          const data = job.data as SendReminderJobData;
+          const { messageId, phone, content, userId } = data;
+
+          await sleep(getRandomDelay(WHATSAPP_MIN_DELAY, WHATSAPP_MAX_DELAY));
+          const result = await wahaService.sendMessage(userId, phone, content);
+
+          if (!result.success) {
+            throw new Error(result.error || 'Falha ao enviar lembrete');
+          }
+          return { success: true };
+        }
+
+        if (job.name === 'send-recurring') {
+          const data = job.data as ScheduleRecurringJobData;
+          const { messageId, phone, content, userId } = data;
+
+          const result = await wahaService.sendMessage(userId, phone, content);
+
+          if (!result.success) {
+            throw new Error(result.error || 'Falha ao enviar recorrente');
+          }
+          
+          // Atualiza o status da mensagem recorrente para indicar que foi enviada
+          // Mas mantém a recorrência ativa para próximos envios
+          await supabase
+            .from('messages')
+            .update({
+              status: 'SENT',
+              sent_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', messageId)
+            .eq('user_id', userId);
+            
+          return { success: true };
+        }
+
+        return { success: false, error: 'Job type unknown' };
       },
       {
         connection: redisConnection as any,
         concurrency: WORKER_CONCURRENCY,
-      },
-    )
+      }
+    );
 
     worker.on('completed', (job) => {
-      console.log(`[Worker] Job ${job.id} concluído`)
-    })
+      console.log(`[Worker] Job ${job.id} concluído`);
+    });
 
     worker.on('failed', (job, err) => {
-      console.error(`[Worker] Job ${job?.id} falhou:`, err.message)
-    })
+      console.error(`[Worker] Job ${job?.id} falhou: ${err.message}`);
+    });
 
     worker.on('error', (err) => {
-      console.error('[Worker] Erro no worker:', err.message)
-    })
+      console.error(`[Worker] Erro: ${err.message}`);
+    });
 
-    console.log('[Worker] Worker de mensagens iniciado')
+    console.log('[Worker] Worker iniciado');
   } catch (error) {
-    console.log('[Worker] Redis não disponível, worker não iniciado:', error)
+    console.log('[Worker] Erro ao iniciar:', error);
   }
-}
+};
 
-startWorker()
+startWorker();
 
 export const stopWorker = async () => {
   if (worker) {
-    await worker.close()
-    console.log('[Worker] Worker de mensagens parado')
+    await worker.close();
+    console.log('[Worker] Parado');
   }
-}
+};
 
-export default worker
+export default worker;

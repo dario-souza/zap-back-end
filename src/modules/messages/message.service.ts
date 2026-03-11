@@ -1,6 +1,7 @@
 import { messageRepository } from './message.repository.ts';
 import { contactRepository } from '../contacts/contact.repository.ts';
 import { sendMessageJob, sendReminderJob, scheduleRecurringJob } from '../../queues/messageQueue.ts';
+import { wahaService } from '../../services/waha.service.ts';
 import type { Message, CreateMessageDto, UpdateMessageDto, RecurrenceType, MessageStatus } from './message.types.ts';
 
 export const messageService = {
@@ -19,7 +20,7 @@ export const messageService = {
         status: 'SCHEDULED',
       });
 
-      const job = await sendMessageJob({
+      const jobId = await sendMessageJob(userId, {
         messageId: message.id,
         phone: message.phone,
         content: message.content,
@@ -28,28 +29,30 @@ export const messageService = {
         contactId: message.contact_id,
       });
 
-      await messageRepository.updateJobId(message.id, userId, job.id || null);
+      await messageRepository.updateJobId(message.id, userId, jobId || null);
 
       if (input.reminder_days && input.reminder_days > 0 && message.scheduled_at) {
         const reminderDate = new Date(message.scheduled_at);
         reminderDate.setDate(reminderDate.getDate() - input.reminder_days);
 
         if (reminderDate > new Date()) {
-          await sendReminderJob({
+          await sendReminderJob(userId, {
             messageId: message.id,
             phone: message.phone,
             content: `Lembrete: Você tem uma mensagem agendada para ${message.scheduled_at}`,
             reminderDate: reminderDate.toISOString(),
+            userId,
           });
         }
       }
 
       if (input.recurrence_type && input.recurrence_type !== 'NONE' && input.recurrence_cron) {
-        await scheduleRecurringJob({
+        await scheduleRecurringJob(userId, {
           messageId: message.id,
           phone: message.phone,
           content: message.content,
           cron: input.recurrence_cron,
+          userId,
         });
       }
 
@@ -61,7 +64,7 @@ export const messageService = {
       status: 'PENDING',
     });
 
-    const job = await sendMessageJob({
+    const jobId = await sendMessageJob(userId, {
       messageId: message.id,
       phone: message.phone,
       content: message.content,
@@ -69,7 +72,7 @@ export const messageService = {
       contactId: message.contact_id,
     });
 
-    await messageRepository.updateJobId(message.id, userId, job.id || null);
+    await messageRepository.updateJobId(message.id, userId, jobId || null);
 
     return message;
   },
@@ -107,7 +110,7 @@ export const messageService = {
       throw new Error('Mensagem não encontrada');
     }
 
-    await sendMessageJob({
+    await sendMessageJob(userId, {
       messageId: message.id,
       phone: message.phone,
       content: message.content,
@@ -154,7 +157,7 @@ export const messageService = {
             status: 'PENDING',
           });
           
-          await sendMessageJob({
+          await sendMessageJob(userId, {
             messageId: message.id,
             phone: contact.phone,
             content,
@@ -197,8 +200,6 @@ export const messageService = {
 
   async sendTest(userId: string, phone: string, message: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
     try {
-      const { wahaService } = await import('../../services/waha.service.ts');
-      
       const result = await wahaService.sendMessage(userId, phone, message);
       
       if (result.success) {

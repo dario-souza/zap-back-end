@@ -1,5 +1,5 @@
 export type MessageStatus = 'PENDING' | 'SCHEDULED' | 'SENT' | 'DELIVERED' | 'READ' | 'FAILED';
-export type RecurrenceType = 'NONE' | 'DAILY' | 'WEEKLY' | 'MONTHLY';
+export type RecurrenceType = 'NONE' | 'WEEKLY' | 'MONTHLY';
 
 export interface Message {
   id: string;

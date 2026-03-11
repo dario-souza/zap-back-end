@@ -151,7 +151,8 @@ export const messageRepository = {
       .from('messages')
       .select('*')
       .neq('recurrence_type', 'NONE')
-      .eq('status', 'SENT');
+      .neq('status', 'CANCELLED')
+      .neq('status', 'cancelled');
 
     if (error) throw error;
     return data || [];
