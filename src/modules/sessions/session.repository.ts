@@ -4,7 +4,7 @@ import { UpdateSessionDto } from './session.types.ts';
 export const sessionRepository = {
   async findByUser(userId: string) {
     const { data, error } = await supabase
-      .from('whatsapp_sessions')
+      .from('user_sessions')
       .select('*')
       .eq('user_id', userId)
       .single();
@@ -15,7 +15,7 @@ export const sessionRepository = {
 
   async findOne(id: string, userId: string) {
     const { data, error } = await supabase
-      .from('whatsapp_sessions')
+      .from('user_sessions')
       .select('*')
       .eq('id', id)
       .eq('user_id', userId)
@@ -27,7 +27,7 @@ export const sessionRepository = {
 
   async create(userId: string, sessionName: string) {
     const { data, error } = await supabase
-      .from('whatsapp_sessions')
+      .from('user_sessions')
       .insert({ user_id: userId, session_name: sessionName })
       .select()
       .single();
@@ -37,7 +37,7 @@ export const sessionRepository = {
 
   async update(userId: string, dto: UpdateSessionDto) {
     const { data, error } = await supabase
-      .from('whatsapp_sessions')
+      .from('user_sessions')
       .update({ ...dto, updated_at: new Date().toISOString() })
       .eq('user_id', userId)
       .select()
@@ -51,7 +51,7 @@ export const sessionRepository = {
     
     if (existing) {
       const { data, error } = await supabase
-        .from('whatsapp_sessions')
+        .from('user_sessions')
         .update({ 
           session_name: sessionName, 
           status,
@@ -64,7 +64,7 @@ export const sessionRepository = {
       return data;
     } else {
       const { data, error } = await supabase
-        .from('whatsapp_sessions')
+        .from('user_sessions')
         .insert({ user_id: userId, session_name: sessionName, status })
         .select()
         .single();
@@ -75,7 +75,7 @@ export const sessionRepository = {
 
   async delete(userId: string) {
     const { error } = await supabase
-      .from('whatsapp_sessions')
+      .from('user_sessions')
       .delete()
       .eq('user_id', userId);
     if (error) throw error;
