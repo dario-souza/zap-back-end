@@ -28,6 +28,7 @@ export const messageRepository = {
   async create(userId: string, input: CreateMessageDto): Promise<Message> {
     const scheduledAt = input.scheduled_at ? new Date(input.scheduled_at) : null;
     const isScheduled = scheduledAt && scheduledAt > new Date();
+    const messageType = input.type || 'instant'
 
     const { data, error } = await supabase
       .from('messages')
@@ -36,6 +37,7 @@ export const messageRepository = {
         phone: input.phone,
         content: input.content,
         contact_id: input.contact_id,
+        type: messageType,
         scheduled_at: input.scheduled_at,
         status: isScheduled ? 'SCHEDULED' : 'PENDING',
         recurrence_type: input.recurrence_type || 'NONE',
@@ -89,6 +91,22 @@ export const messageRepository = {
       .from('messages')
       .update({
         job_id: jobId,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .eq('user_id', userId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  async updateWaMessageId(id: string, userId: string, waMessageId: string | null): Promise<Message> {
+    const { data, error } = await supabase
+      .from('messages')
+      .update({
+        wa_message_id: waMessageId,
         updated_at: new Date().toISOString(),
       })
       .eq('id', id)

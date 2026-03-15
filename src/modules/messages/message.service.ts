@@ -1,124 +1,189 @@
-import { messageRepository } from './message.repository.ts';
-import { contactRepository } from '../contacts/contact.repository.ts';
-import { sendMessageJob, sendReminderJob, scheduleRecurringJob } from '../../queues/messageQueue.ts';
-import { wahaService } from '../../services/waha.service.ts';
-import type { Message, CreateMessageDto, UpdateMessageDto, RecurrenceType, MessageStatus } from './message.types.ts';
+import { messageRepository } from './message.repository'
+import { contactRepository } from '../contacts/contact.repository'
+import { messageQueue } from '../../queue/queue'
+import { whatsappService } from '../../integrations/whatsapp/whatsapp.service'
+import { messageLogRepository } from './message-log.repository'
+import type { Message, CreateMessageDto, UpdateMessageDto, MessageStatus } from './message.types'
+
+const getSessionName = (userId: string): string => {
+  return whatsappService.getSessionName(userId)
+}
 
 export const messageService = {
   async getAll(userId: string): Promise<Message[]> {
-    return messageRepository.findAll(userId);
+    return messageRepository.findAll(userId)
   },
 
   async getById(id: string, userId: string): Promise<Message | null> {
-    return messageRepository.findById(id, userId);
+    return messageRepository.findById(id, userId)
   },
 
   async create(userId: string, input: CreateMessageDto): Promise<Message> {
-    if (input.scheduled_at) {
+    const sessionName = getSessionName(userId)
+
+    const messageType = input.type || 'instant'
+
+    if (messageType === 'scheduled' && input.scheduled_at) {
       const message = await messageRepository.create(userId, {
         ...input,
-        status: 'SCHEDULED',
-      });
+        type: 'scheduled',
+        status: 'pending',
+      })
 
-      const jobId = await sendMessageJob(userId, {
+      const scheduledAt = message.scheduled_at || ''
+      const jobId = await messageQueue.addScheduled({
+        type: 'scheduled',
         messageId: message.id,
+        userId,
+        sessionName,
         phone: message.phone,
         content: message.content,
-        scheduledAt: message.scheduled_at,
-        userId,
         contactId: message.contact_id,
-      });
+        scheduledAt,
+      })
 
-      await messageRepository.updateJobId(message.id, userId, jobId || null);
-
-      if (input.reminder_days && input.reminder_days > 0 && message.scheduled_at) {
-        const reminderDate = new Date(message.scheduled_at);
-        reminderDate.setDate(reminderDate.getDate() - input.reminder_days);
-
-        if (reminderDate > new Date()) {
-          await sendReminderJob(userId, {
-            messageId: message.id,
-            phone: message.phone,
-            content: `Lembrete: Você tem uma mensagem agendada para ${message.scheduled_at}`,
-            reminderDate: reminderDate.toISOString(),
-            userId,
-          });
-        }
-      }
+      await messageRepository.updateJobId(message.id, userId, jobId || null)
 
       if (input.recurrence_type && input.recurrence_type !== 'NONE' && input.recurrence_cron) {
-        await scheduleRecurringJob(userId, {
+        const schedulerId = `recurring_${message.id}`
+        await messageQueue.addRecurring(schedulerId, {
+          type: 'recurring',
           messageId: message.id,
+          userId,
+          sessionName,
           phone: message.phone,
           content: message.content,
-          cron: input.recurrence_cron,
-          userId,
-        });
+          contactId: message.contact_id,
+        }, input.recurrence_cron)
+
+        await messageRepository.updateJobId(message.id, userId, schedulerId)
       }
 
-      return message;
+      return message
+    }
+
+    if (messageType === 'recurring' && input.recurrence_type && input.recurrence_type !== 'NONE') {
+      const message = await messageRepository.create(userId, {
+        ...input,
+        type: 'recurring',
+        status: 'pending',
+      })
+
+      if (input.recurrence_cron) {
+        const schedulerId = `recurring_${message.id}`
+        await messageQueue.addRecurring(schedulerId, {
+          type: 'recurring',
+          messageId: message.id,
+          userId,
+          sessionName,
+          phone: message.phone,
+          content: message.content,
+          contactId: message.contact_id,
+        }, input.recurrence_cron)
+
+        await messageRepository.updateJobId(message.id, userId, schedulerId)
+      }
+
+      return message
     }
 
     const message = await messageRepository.create(userId, {
       ...input,
-      status: 'PENDING',
-    });
+      type: 'instant',
+      status: 'pending',
+    })
 
-    const jobId = await sendMessageJob(userId, {
-      messageId: message.id,
-      phone: message.phone,
-      content: message.content,
-      userId,
-      contactId: message.contact_id,
-    });
+    const result = await whatsappService.send(sessionName, message.phone, message.content)
 
-    await messageRepository.updateJobId(message.id, userId, jobId || null);
+    if (result.success) {
+      await messageRepository.updateStatus(message.id, userId, 'sent')
+      await messageRepository.updateWaMessageId(message.id, userId, result.id || null)
+      await messageLogRepository.create({
+        messageId: message.id,
+        userId,
+        event: 'sent',
+        wahaMessageId: result.id,
+      })
+    } else {
+      await messageRepository.updateStatus(message.id, userId, 'failed')
+      await messageLogRepository.create({
+        messageId: message.id,
+        userId,
+        event: 'failed',
+        metadata: { error: result.error },
+      })
+    }
 
-    return message;
+    return message
   },
 
   async update(id: string, userId: string, input: UpdateMessageDto): Promise<Message> {
-    return messageRepository.update(id, userId, input);
+    return messageRepository.update(id, userId, input)
   },
 
   async delete(id: string, userId: string): Promise<void> {
-    return messageRepository.delete(id, userId);
+    return messageRepository.delete(id, userId)
   },
 
   async deleteAll(userId: string): Promise<void> {
-    return messageRepository.deleteAll(userId);
+    return messageRepository.deleteAll(userId)
   },
 
   async cancel(id: string, userId: string): Promise<Message> {
-    const message = await messageRepository.findById(id, userId);
+    const message = await messageRepository.findById(id, userId)
     
     if (!message) {
-      throw new Error('Mensagem não encontrada');
+      throw new Error('Mensagem não encontrada')
     }
 
-    if (message.status !== 'SCHEDULED' && message.status !== 'PENDING') {
-      throw new Error('Apenas mensagens pendentes ou agendadas podem ser canceladas');
+    if (message.status !== 'pending' && message.status !== 'SCHEDULED' && message.status !== 'PENDING') {
+      throw new Error('Apenas mensagens pendentes podem ser canceladas')
     }
 
-    return messageRepository.update(id, userId, { status: 'CANCELLED' as MessageStatus });
+    if (message.job_id) {
+      if (message.job_id.startsWith('recurring_')) {
+        await messageQueue.removeRecurring(message.job_id)
+      } else {
+        const job = await messageQueue.getJob(message.job_id)
+        if (job) {
+          await job.remove()
+        }
+      }
+    }
+
+    return messageRepository.update(id, userId, { status: 'cancelled' })
   },
 
   async sendNow(id: string, userId: string): Promise<Message> {
-    const message = await messageRepository.findById(id, userId);
+    const message = await messageRepository.findById(id, userId)
     
     if (!message) {
-      throw new Error('Mensagem não encontrada');
+      throw new Error('Mensagem não encontrada')
     }
 
-    await sendMessageJob(userId, {
-      messageId: message.id,
-      phone: message.phone,
-      content: message.content,
-      userId,
-      contactId: message.contact_id,
-    });
+    const sessionName = getSessionName(userId)
+    const result = await whatsappService.send(sessionName, message.phone, message.content)
 
-    return messageRepository.update(id, userId, { status: 'PENDING' });
+    if (result.success) {
+      await messageRepository.updateStatus(message.id, userId, 'sent')
+      await messageRepository.updateWaMessageId(message.id, userId, result.id || null)
+      await messageLogRepository.create({
+        messageId: message.id,
+        userId,
+        event: 'sent',
+        wahaMessageId: result.id,
+      })
+    } else {
+      await messageRepository.updateStatus(message.id, userId, 'failed')
+      await messageLogRepository.create({
+        messageId: message.id,
+        userId,
+        event: 'failed',
+        metadata: { error: result.error },
+      })
+    }
+
+    return messageRepository.findById(id, userId) as Promise<Message>
   },
 
   async createBulk(
@@ -129,50 +194,65 @@ export const messageService = {
     sendNow?: boolean,
     recurrenceType?: string
   ): Promise<{ success: number; failed: number; total: number }> {
-    let success = 0;
-    let failed = 0;
+    let success = 0
+    let failed = 0
+    const sessionName = getSessionName(userId)
 
     for (const contactId of contactIds) {
       try {
-        const contact = await contactRepository.findById(contactId, userId);
+        const contact = await contactRepository.findById(contactId, userId)
         if (!contact) {
-          failed++;
-          continue;
+          failed++
+          continue
         }
 
-        if (scheduledAt) {
+        if (scheduledAt || recurrenceType) {
           await this.create(userId, {
             content,
             phone: contact.phone,
             contact_id: contactId,
             scheduled_at: scheduledAt,
-            status: 'SCHEDULED',
-            recurrence_type: (recurrenceType || 'NONE') as RecurrenceType,
-          });
+            status: 'pending',
+            recurrence_type: (recurrenceType || 'NONE') as any,
+            type: scheduledAt ? 'scheduled' : 'recurring',
+          })
         } else {
           const message = await messageRepository.create(userId, {
             content,
             phone: contact.phone,
             contact_id: contactId,
-            status: 'PENDING',
-          });
+            status: 'pending',
+            type: 'instant',
+          })
           
-          await sendMessageJob(userId, {
-            messageId: message.id,
-            phone: contact.phone,
-            content,
-            userId,
-            contactId,
-          });
+          const result = await whatsappService.send(sessionName, contact.phone, content)
+
+          if (result.success) {
+            await messageRepository.updateStatus(message.id, userId, 'sent')
+            await messageLogRepository.create({
+              messageId: message.id,
+              userId,
+              event: 'sent',
+              wahaMessageId: result.id,
+            })
+          } else {
+            await messageRepository.updateStatus(message.id, userId, 'failed')
+            await messageLogRepository.create({
+              messageId: message.id,
+              userId,
+              event: 'failed',
+              metadata: { error: result.error },
+            })
+          }
         }
-        success++;
+        success++
       } catch (error) {
-        console.error('Erro ao criar mensagem para contato:', contactId, error);
-        failed++;
+        console.error('Erro ao criar mensagem para contato:', contactId, error)
+        failed++
       }
     }
 
-    return { success, failed, total: contactIds.length };
+    return { success, failed, total: contactIds.length }
   },
 
   async createWithReminder(
@@ -182,9 +262,9 @@ export const messageService = {
     scheduledAt: string,
     reminderDays: number
   ): Promise<Message> {
-    const contact = await contactRepository.findById(contactId, userId);
+    const contact = await contactRepository.findById(contactId, userId)
     if (!contact) {
-      throw new Error('Contato não encontrado');
+      throw new Error('Contato não encontrado')
     }
 
     return this.create(userId, {
@@ -192,23 +272,21 @@ export const messageService = {
       phone: contact.phone,
       contact_id: contactId,
       scheduled_at: scheduledAt,
-      status: 'SCHEDULED' as MessageStatus,
+      status: 'pending',
       reminder_days: reminderDays,
       is_reminder: false,
-    });
+      type: 'scheduled',
+    })
   },
 
   async sendTest(userId: string, phone: string, message: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
-    try {
-      const result = await wahaService.sendMessage(userId, phone, message);
-      
-      if (result.success) {
-        return { success: true, messageId: result.messageId };
-      }
-      
-      return { success: false, error: result.error || 'Falha ao enviar mensagem' };
-    } catch (error) {
-      return { success: false, error: String(error) };
+    const sessionName = getSessionName(userId)
+    const result = await whatsappService.send(sessionName, phone, message)
+    
+    if (result.success) {
+      return { success: true, messageId: result.id }
     }
+    
+    return { success: false, error: result.error || 'Falha ao enviar mensagem' }
   },
-};
+}

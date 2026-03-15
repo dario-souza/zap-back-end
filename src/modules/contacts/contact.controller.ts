@@ -1,8 +1,15 @@
 import { Response } from 'express'
 import { contactService } from './contact.service.ts'
-import type { AuthRequest } from '../../middleware/auth.ts'
+import { asyncHandler } from '../../shared/utils/asyncHandler.ts'
+import type { AuthRequest } from '../auth/auth.types.ts'
 import type { CreateContactDto, UpdateContactDto } from './contact.types.ts'
-import { asyncHandler, getUserId } from '../../lib/baseController.ts'
+
+const getUserId = (req: AuthRequest): string => {
+  if (!req.user?.id) {
+    throw new Error('Usuário não autenticado')
+  }
+  return req.user.id
+}
 
 export const contactController = {
   getAll: asyncHandler(async (req: AuthRequest, res: Response) => {
