@@ -9,6 +9,22 @@ const getSessionName = (userId: string): string => {
   return whatsappService.getSessionName(userId)
 }
 
+const replaceVariables = (
+  content: string,
+  contact: { name?: string; phone?: string; email?: string } | null,
+): string => {
+  if (!contact) return content
+
+  let result = content
+  result = result.replace(/\{\{nome\}\}/gi, contact.name || '')
+  result = result.replace(/\{\{name\}\}/gi, contact.name || '')
+  result = result.replace(/\{\{phone\}\}/gi, contact.phone || '')
+  result = result.replace(/\{\{telefone\}\}/gi, contact.phone || '')
+  result = result.replace(/\{\{email\}\}/gi, contact.email || '')
+
+  return result
+}
+
 export const messageService = {
   async getAll(userId: string): Promise<Message[]> {
     return messageRepository.findAll(userId)
@@ -71,6 +87,48 @@ export const messageService = {
 
       if (input.recurrence_cron) {
         const schedulerId = `recurring_${message.id}`
+        
+        let shouldCreateSingleJob = false
+        
+        if (input.scheduled_at) {
+          const scheduledDate = new Date(input.scheduled_at)
+          const now = new Date()
+          
+          if (scheduledDate > now) {
+            const [cronMinutes, cronHours, cronDayOfMonth] = input.recurrence_cron.split(' ')
+            const today = new Date()
+            const todayDay = today.getDate()
+            const todayMonth = today.getMonth() + 1
+            
+            const cronDay = parseInt(cronDayOfMonth)
+            
+            const isTodayMatchingCron = cronDay === todayDay
+            const isScheduledToday = scheduledDate.getDate() === todayDay && 
+                                   scheduledDate.getMonth() === today.getMonth()
+            
+            if (!isTodayMatchingCron || !isScheduledToday) {
+              shouldCreateSingleJob = true
+            }
+          } else {
+            shouldCreateSingleJob = true
+          }
+          
+          if (shouldCreateSingleJob) {
+            const delay = scheduledDate.getTime() - Date.now()
+            const jobId = await messageQueue.add('send-message', {
+              type: 'scheduled',
+              messageId: message.id,
+              userId,
+              sessionName,
+              phone: message.phone,
+              content: message.content,
+              contactId: message.contact_id,
+            }, { delay })
+            
+            await messageRepository.updateJobId(message.id, userId, jobId || null)
+          }
+        }
+        
         await messageQueue.addRecurring(schedulerId, {
           type: 'recurring',
           messageId: message.id,
@@ -79,6 +137,7 @@ export const messageService = {
           phone: message.phone,
           content: message.content,
           contactId: message.contact_id,
+          recurrenceCron: input.recurrence_cron,
         }, input.recurrence_cron)
 
         await messageRepository.updateJobId(message.id, userId, schedulerId)
@@ -93,7 +152,16 @@ export const messageService = {
       status: 'pending',
     })
 
-    const result = await whatsappService.send(sessionName, message.phone, message.content)
+    let finalContent = message.content
+
+    if (message.contact_id) {
+      const contact = await contactRepository.findById(message.contact_id, userId)
+      if (contact) {
+        finalContent = replaceVariables(message.content, contact)
+      }
+    }
+
+    const result = await whatsappService.send(sessionName, message.phone, finalContent)
 
     if (result.success) {
       await messageRepository.updateStatus(message.id, userId, 'sent')
@@ -122,7 +190,43 @@ export const messageService = {
   },
 
   async delete(id: string, userId: string): Promise<void> {
+    const message = await messageRepository.findById(id, userId)
+    
+    if (message?.job_id) {
+      if (message.job_id.startsWith('recurring_')) {
+        await messageQueue.removeRecurring(message.job_id)
+      } else {
+        const job = await messageQueue.getJob(message.job_id)
+        if (job) {
+          await job.remove()
+        }
+      }
+    }
+    
     return messageRepository.delete(id, userId)
+  },
+
+  async deleteAllRecurring(userId: string): Promise<number> {
+    const messages = await messageRepository.findAll(userId)
+    const recurringMessages = messages.filter(
+      (m) => m.recurrence_type && m.recurrence_type !== 'NONE'
+    )
+    
+    for (const message of recurringMessages) {
+      if (message.job_id) {
+        if (message.job_id.startsWith('recurring_')) {
+          await messageQueue.removeRecurring(message.job_id)
+        } else {
+          const job = await messageQueue.getJob(message.job_id)
+          if (job) {
+            await job.remove()
+          }
+        }
+      }
+      await messageRepository.delete(message.id, userId)
+    }
+    
+    return recurringMessages.length
   },
 
   async deleteAll(userId: string): Promise<void> {
@@ -162,7 +266,16 @@ export const messageService = {
     }
 
     const sessionName = getSessionName(userId)
-    const result = await whatsappService.send(sessionName, message.phone, message.content)
+
+    let finalContent = message.content
+    if (message.contact_id) {
+      const contact = await contactRepository.findById(message.contact_id, userId)
+      if (contact) {
+        finalContent = replaceVariables(message.content, contact)
+      }
+    }
+
+    const result = await whatsappService.send(sessionName, message.phone, finalContent)
 
     if (result.success) {
       await messageRepository.updateStatus(message.id, userId, 'sent')
@@ -198,6 +311,8 @@ export const messageService = {
     let failed = 0
     const sessionName = getSessionName(userId)
 
+    const isScheduledOrRecurring = scheduledAt || recurrenceType
+
     for (const contactId of contactIds) {
       try {
         const contact = await contactRepository.findById(contactId, userId)
@@ -206,7 +321,17 @@ export const messageService = {
           continue
         }
 
-        if (scheduledAt || recurrenceType) {
+        const message = await messageRepository.create(userId, {
+          content,
+          phone: contact.phone,
+          contact_id: contactId,
+          status: 'pending',
+          type: isScheduledOrRecurring ? (scheduledAt ? 'scheduled' : 'recurring') : 'instant',
+          scheduled_at: scheduledAt,
+          recurrence_type: (recurrenceType || 'NONE') as any,
+        })
+
+        if (isScheduledOrRecurring) {
           await this.create(userId, {
             content,
             phone: contact.phone,
@@ -217,34 +342,19 @@ export const messageService = {
             type: scheduledAt ? 'scheduled' : 'recurring',
           })
         } else {
-          const message = await messageRepository.create(userId, {
-            content,
+          const jobId = await messageQueue.add('send-message', {
+            type: 'instant_bulk',
+            messageId: message.id,
+            userId,
+            sessionName,
             phone: contact.phone,
-            contact_id: contactId,
-            status: 'pending',
-            type: 'instant',
+            content,
+            contactId,
           })
-          
-          const result = await whatsappService.send(sessionName, contact.phone, content)
 
-          if (result.success) {
-            await messageRepository.updateStatus(message.id, userId, 'sent')
-            await messageLogRepository.create({
-              messageId: message.id,
-              userId,
-              event: 'sent',
-              wahaMessageId: result.id,
-            })
-          } else {
-            await messageRepository.updateStatus(message.id, userId, 'failed')
-            await messageLogRepository.create({
-              messageId: message.id,
-              userId,
-              event: 'failed',
-              metadata: { error: result.error },
-            })
-          }
+          await messageRepository.updateJobId(message.id, userId, jobId || null)
         }
+
         success++
       } catch (error) {
         console.error('Erro ao criar mensagem para contato:', contactId, error)

@@ -77,6 +77,12 @@ export const messageController = {
     res.status(204).send()
   }),
 
+  deleteAllRecurring: asyncHandler(async (req: AuthRequest, res: Response) => {
+    const userId = getUserId(req)
+    const count = await messageService.deleteAllRecurring(userId)
+    res.json({ deleted: count })
+  }),
+
   sendNow: asyncHandler(async (req: AuthRequest, res: Response) => {
     const userId = getUserId(req)
     const { id } = req.params

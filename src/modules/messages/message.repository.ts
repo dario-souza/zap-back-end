@@ -118,6 +118,22 @@ export const messageRepository = {
     return data;
   },
 
+  async updateNextSendAt(id: string, userId: string, nextSendAt: string): Promise<Message> {
+    const { data, error } = await supabase
+      .from('messages')
+      .update({
+        next_send_at: nextSendAt,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .eq('user_id', userId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
   async delete(id: string, userId: string): Promise<void> {
     const { error } = await supabase
       .from('messages')

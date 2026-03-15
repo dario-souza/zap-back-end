@@ -9,9 +9,44 @@ import type { JobPayload } from './job.types.ts'
 const WHATSAPP_MIN_DELAY = 2000
 const WHATSAPP_MAX_DELAY = 5000
 
+const calculateNextSendAt = (cronPattern: string): Date => {
+  const [minutes, hours, dayOfMonth, , dayOfWeek] = cronPattern.split(' ')
+  const now = new Date()
+  const next = new Date(now)
+  
+  next.setMinutes(parseInt(minutes))
+  next.setHours(parseInt(hours))
+  next.setSeconds(0)
+  next.setMilliseconds(0)
+  
+  if (dayOfMonth !== '*') {
+    next.setDate(parseInt(dayOfMonth))
+  }
+  
+  if (dayOfWeek !== '*') {
+    const targetDay = parseInt(dayOfWeek)
+    const currentDay = next.getDay()
+    let daysToAdd = targetDay - currentDay
+    if (daysToAdd < 0 || (daysToAdd === 0 && next <= now)) {
+      daysToAdd += 7
+    }
+    next.setDate(next.getDate() + daysToAdd)
+  }
+  
+  if (next <= now) {
+    if (dayOfMonth !== '*') {
+      next.setMonth(next.getMonth() + 1)
+    } else if (dayOfWeek !== '*') {
+      next.setDate(next.getDate() + 7)
+    }
+  }
+  
+  return next
+}
+
 const replaceVariables = (
   content: string,
-  contact: { name?: string; phone?: string } | null,
+  contact: { name?: string; phone?: string; email?: string } | null,
 ): string => {
   if (!contact) return content
 
@@ -20,6 +55,7 @@ const replaceVariables = (
   result = result.replace(/\{\{name\}\}/gi, contact.name || '')
   result = result.replace(/\{\{phone\}\}/gi, contact.phone || '')
   result = result.replace(/\{\{telefone\}\}/gi, contact.phone || '')
+  result = result.replace(/\{\{email\}\}/gi, contact.email || '')
 
   return result
 }
@@ -47,7 +83,7 @@ export const messageWorker = {
           console.log(`[Worker] Job ${job.id} - Tipo: ${job.name}`)
 
           const data = job.data
-          const { messageId, phone, content, userId, sessionName, contactId } =
+          const { messageId, phone, content, userId, sessionName, contactId, recurrenceCron } =
             data
 
           const humanDelay = getRandomDelay(
@@ -64,7 +100,7 @@ export const messageWorker = {
           if (contactId) {
             const { data: contact } = await supabase
               .from('contacts')
-              .select('name, phone')
+              .select('name, phone, email')
               .eq('id', contactId)
               .single()
 
@@ -90,6 +126,11 @@ export const messageWorker = {
                 event: 'sent',
                 wahaMessageId: result.id,
               })
+              
+              if (recurrenceCron) {
+                const nextSendAt = calculateNextSendAt(recurrenceCron)
+                await messageRepository.updateNextSendAt(messageId, userId, nextSendAt.toISOString())
+              }
             }
             console.log(`[Worker] Sucesso! WAHA ID: ${result.id}`)
             return { success: true, waMessageId: result.id }
@@ -109,7 +150,7 @@ export const messageWorker = {
         },
         {
           connection: redisConnection as any,
-          concurrency: 10,
+          concurrency: 1,
         },
       )
 

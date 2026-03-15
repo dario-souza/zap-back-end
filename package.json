@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "start": "tsx src/server.ts",
-    "start:worker": "tsx src/workers/messageWorker.ts",
+    "start:worker": "tsx src/queue/worker.ts",
     "dev": "tsx --env-file .env src/server.ts",
     "dev:local": "tsx --env-file .env.local --watch src/server.ts",
     "dev:worker": "tsx --env-file .env.local --watch src/queue/worker.ts",

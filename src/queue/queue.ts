@@ -67,7 +67,7 @@ export const messageQueue = {
         data,
         opts: {
           attempts: 3,
-          backoff: { type: 'exponential', delay: 5000 },
+          backoff: { type: 'exponential', delay: 2000 },
         },
       },
     )
