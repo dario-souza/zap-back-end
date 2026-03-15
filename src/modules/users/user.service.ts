@@ -1,4 +1,5 @@
 import { userRepository } from './user.repository.ts';
+import { supabase } from '../../config/supabase.ts';
 import type { User, UpdateUserDto } from './user.types.ts';
 
 export const userService = {
@@ -8,5 +9,12 @@ export const userService = {
 
   async updateProfile(userId: string, input: UpdateUserDto): Promise<User> {
     return userRepository.update(userId, input);
+  },
+
+  async deleteAccount(userId: string): Promise<void> {
+    const { error } = await supabase.auth.admin.deleteUser(userId);
+    if (error) {
+      throw new Error(error.message);
+    }
   },
 };

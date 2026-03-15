@@ -30,4 +30,10 @@ export const userController = {
     const profile = await userService.updateProfile(userId, { name })
     res.json(profile)
   }),
+
+  deleteAccount: asyncHandler(async (req: AuthRequest, res: Response) => {
+    const userId = getUserId(req)
+    await userService.deleteAccount(userId)
+    res.status(200).json({ message: 'Conta deletada com sucesso' })
+  }),
 }

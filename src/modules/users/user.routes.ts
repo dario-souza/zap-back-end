@@ -8,3 +8,4 @@ userRoutes.use(authMiddleware)
 
 userRoutes.get('/profile', userController.getProfile)
 userRoutes.put('/profile', userController.updateProfile)
+userRoutes.delete('/account', userController.deleteAccount)
