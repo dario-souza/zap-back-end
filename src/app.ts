@@ -13,6 +13,7 @@ import { authRoutes } from './modules/auth/auth.routes'
 import { userRoutes } from './modules/users/user.routes'
 import { errorHandler } from './shared/errors/errorHandler'
 import { wahaRoutes } from './modules/waha/waha.routes'
+import { wahaWebhookRoutes } from './modules/waha/waha-webhook.routes'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -36,6 +37,7 @@ app.use('/api/contacts', contactRoutes)
 app.use('/api/sessions', sessionRoutes)
 app.use('/api/templates', templateRoutes)
 app.use('/api/confirmations', confirmationRoutes)
+app.use('/api/webhooks/waha', wahaWebhookRoutes)
 app.use('/api/webhooks', webhookRoutes)
 app.use('/api/auth', authRoutes)
 app.use('/api/users', userRoutes)
