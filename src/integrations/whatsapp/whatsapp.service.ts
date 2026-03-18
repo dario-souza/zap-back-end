@@ -198,12 +198,12 @@ export const whatsappService = {
           return { success: true, status: 'WORKING' }
         }
 
-        if (currentStatus === 'SCAN_QR_CODE' || currentStatus === 'STARTING' || currentStatus === 'FAILED') {
+        if (currentStatus === 'SCAN_QR_CODE' || currentStatus === 'STARTING') {
           await saveUserSession(userId, sessionName, currentStatus || 'PENDING')
           return { success: true, status: currentStatus }
         }
 
-        if (currentStatus === 'STOPPED') {
+        if (currentStatus === 'FAILED' || currentStatus === 'STOPPED') {
           const startBody: any = { start: true }
           
           if (webhookUrl) {
