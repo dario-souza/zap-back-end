@@ -210,7 +210,7 @@ export const whatsappService = {
             startBody.config = {
               webhooks: [{
                 url: webhookUrl,
-                events: ['qr', 'session.status', 'message', 'message.any', 'message.ack'],
+                events: ['session.status', 'message', 'message.any', 'message.ack'],
                 retries: {
                   policy: 'constant',
                   delaySeconds: 2,
@@ -249,7 +249,7 @@ export const whatsappService = {
 
         const webhookConfig = [{
           url: webhookUrl,
-          events: ['qr', 'session.status', 'message', 'message.any', 'message.ack'],
+          events: ['session.status', 'message', 'message.any', 'message.ack'],
           retries: {
             policy: 'constant',
             delaySeconds: 2,
