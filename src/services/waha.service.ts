@@ -197,7 +197,20 @@ export class WahaService {
         if (currentStatus === 'STOPPED') {
           const startResponse = await fetch(
             `${this.baseUrl}/api/sessions/${sessionName}/start`,
-            { method: 'POST', headers: this.getHeaders() }
+            {
+              method: 'POST',
+              headers: this.getHeaders(),
+              body: JSON.stringify({
+                config: {
+                  webhooks: [
+                    {
+                      url: `${process.env.BACKEND_URL || 'http://localhost:3001'}/api/webhooks/waha`,
+                      events: ['message', 'message.any', 'message.ack', 'session.status']
+                    }
+                  ]
+                }
+              })
+            }
           );
 
           if (!startResponse.ok) {
@@ -230,7 +243,13 @@ export class WahaService {
                 store: {
                   enabled: true,
                 }
-              }
+              },
+              webhooks: [
+                {
+                  url: `${process.env.BACKEND_URL || 'http://localhost:3001'}/api/webhooks/waha`,
+                  events: ['message', 'message.any', 'message.ack', 'session.status']
+                }
+              ]
             }
           }),
         });
