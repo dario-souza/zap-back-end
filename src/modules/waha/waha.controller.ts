@@ -18,12 +18,22 @@ export class WahaController {
     }
 
     const status = await this.service.getSessionStatus(userId);
+    
+    let qrCode = null;
+    if (status.status === 'SCAN_QR_CODE' || status.status === 'STARTING') {
+      const qrResult = await this.service.getQRCode(userId);
+      if (qrResult.qr) {
+        qrCode = qrResult.qr;
+      }
+    }
+    
     res.json({
       connected: status.connected,
       status: status.status,
       error: status.error,
       phone: status.phone,
       pushName: status.pushName,
+      qrCode,
     });
   });
 

@@ -84,7 +84,7 @@ export class WahaService {
   }
 
   private getSessionName(userId: string): string {
-    return `user_${userId.substring(0, 8)}`;
+    return `user_${userId.replace(/-/g, '_').substring(0, 40)}`;
   }
 
   async sendMessage(userId: string, phone: string, message: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
