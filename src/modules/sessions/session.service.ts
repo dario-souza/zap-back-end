@@ -18,7 +18,7 @@ export const sessionService = {
 
   async start(userId: string) {
     const session = await this.getOrCreate(userId)
-    const webhookUrl = env.WAHA_WEBHOOK_URL || `${env.BACKEND_URL}/api/webhooks/waha`
+    const webhookUrl = env.WAHA_WEBHOOK_URL || `${env.BACKEND_URL}/waha/webhook`
     const result = await whatsappService.createOrStart(userId, webhookUrl)
     
     if (!result.success) {
@@ -45,7 +45,7 @@ export const sessionService = {
 
   async getQRCode(userId: string, retryCount = 0): Promise<{ qr?: string | null; connected?: boolean; message?: string; status?: string; isPairingCode?: boolean }> {
     const maxRetries = 2
-    const webhookUrl = env.WAHA_WEBHOOK_URL || `${env.BACKEND_URL}/api/webhooks/waha`
+    const webhookUrl = env.WAHA_WEBHOOK_URL || `${env.BACKEND_URL}/waha/webhook`
     
     try {
       const session = await this.getOrCreate(userId)

@@ -12,6 +12,7 @@ import { webhookRoutes } from './modules/webhooks/webhook.routes'
 import { authRoutes } from './modules/auth/auth.routes'
 import { userRoutes } from './modules/users/user.routes'
 import { errorHandler } from './shared/errors/errorHandler'
+import { wahaRoutes } from './modules/waha/waha.routes'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -38,6 +39,7 @@ app.use('/api/confirmations', confirmationRoutes)
 app.use('/api/webhooks', webhookRoutes)
 app.use('/api/auth', authRoutes)
 app.use('/api/users', userRoutes)
+app.use('/waha', wahaRoutes)
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
