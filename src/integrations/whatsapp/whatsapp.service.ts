@@ -204,9 +204,29 @@ export const whatsappService = {
         }
 
         if (currentStatus === 'STOPPED') {
+          const startBody: any = { start: true }
+          
+          if (webhookUrl) {
+            startBody.config = {
+              webhooks: [{
+                url: webhookUrl,
+                events: ['qr', 'session.status', 'message', 'message.any', 'message.ack'],
+                retries: {
+                  policy: 'constant',
+                  delaySeconds: 2,
+                  attempts: 5,
+                },
+              }]
+            }
+          }
+          
           const startResponse = await fetch(
             `${WAHA_URL}/api/sessions/${sessionName}/start`,
-            { method: 'POST', headers: getHeaders() }
+            {
+              method: 'POST',
+              headers: getHeaders(),
+              body: JSON.stringify(startBody)
+            }
           )
 
           if (!startResponse.ok) {
@@ -227,10 +247,15 @@ export const whatsappService = {
       if (statusResponse.status === 404) {
         console.log('[WAHA] Criando nova sessão:', sessionName)
 
-        const webhookConfig = webhookUrl ? [{
+        const webhookConfig = [{
           url: webhookUrl,
-          events: ['message', 'session.status', 'message.ack']
-        }] : []
+          events: ['qr', 'session.status', 'message', 'message.any', 'message.ack'],
+          retries: {
+            policy: 'constant',
+            delaySeconds: 2,
+            attempts: 5,
+          },
+        }]
         
         const createResponse = await fetch(`${WAHA_URL}/api/sessions`, {
           method: 'POST',
