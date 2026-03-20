@@ -30,6 +30,15 @@ const isRecurring = (input: CreateMessageDto): boolean => {
   return (input.type === 'recurring' || input.recurrence_type === 'WEEKLY' || input.recurrence_type === 'MONTHLY')
 }
 
+const isScheduled = (input: CreateMessageDto): boolean => {
+  if (isRecurring(input)) return false
+  if (input.scheduled_at) {
+    const scheduledDate = new Date(input.scheduled_at)
+    return scheduledDate > new Date()
+  }
+  return false
+}
+
 const buildCronFromInput = (input: CreateMessageDto): string => {
   if (input.recurrence_cron) return input.recurrence_cron
 
@@ -65,79 +74,99 @@ export const messageService = {
 
   async create(userId: string, input: CreateMessageDto): Promise<Message> {
     const sessionName = getSessionName(userId)
-    const isInstant = !isRecurring(input)
+    const recurring = isRecurring(input)
+    const scheduled = isScheduled(input)
+
+    let messageType: 'instant' | 'scheduled' | 'recurring' = 'instant'
+    if (recurring) messageType = 'recurring'
+    else if (scheduled) messageType = 'scheduled'
 
     const message = await messageRepository.create(userId, {
       ...input,
-      type: isInstant ? 'instant' : 'recurring',
+      type: messageType,
       status: 'pending',
     })
 
-    if (isInstant) {
-      let finalContent = message.content
-      if (message.contact_id) {
-        const contact = await contactRepository.findById(message.contact_id, userId)
-        if (contact) {
-          finalContent = replaceVariables(message.content, contact)
+    if (recurring) {
+      const cron = buildCronFromInput(input)
+      const schedulerId = `recurring_${message.id}`
+
+      if (input.scheduled_at) {
+        const scheduledDate = new Date(input.scheduled_at)
+        if (scheduledDate > new Date()) {
+          const delay = scheduledDate.getTime() - Date.now()
+          const jobId = await messageQueue.add('send-message', {
+            type: 'scheduled',
+            messageId: message.id,
+            userId,
+            sessionName,
+            phone: message.phone,
+            content: message.content,
+            contactId: message.contact_id,
+            recurrenceCron: cron,
+          }, { delay: Math.max(0, delay) })
+          await messageRepository.updateJobId(message.id, userId, jobId || null)
         }
       }
 
-      const result = await whatsappService.send(sessionName, message.phone, finalContent)
+      await messageQueue.addRecurring(schedulerId, {
+        type: 'recurring',
+        messageId: message.id,
+        userId,
+        sessionName,
+        phone: message.phone,
+        content: message.content,
+        contactId: message.contact_id,
+        recurrenceCron: cron,
+      }, cron)
 
-      if (result.success) {
-        await messageRepository.updateStatus(message.id, userId, 'sent')
-        await messageRepository.updateWaMessageId(message.id, userId, result.id || null)
-        await messageLogRepository.create({
-          messageId: message.id,
-          userId,
-          event: 'sent',
-          wahaMessageId: result.id,
-        })
-      } else {
-        await messageRepository.updateStatus(message.id, userId, 'failed')
-        await messageLogRepository.create({
-          messageId: message.id,
-          userId,
-          event: 'failed',
-          metadata: { error: result.error },
-        })
-      }
+      await messageRepository.updateJobId(message.id, userId, schedulerId)
       return message
     }
 
-    const cron = buildCronFromInput(input)
-    const schedulerId = `recurring_${message.id}`
+    if (scheduled) {
+      const delay = new Date(input.scheduled_at!).getTime() - Date.now()
+      const jobId = await messageQueue.add('send-message', {
+        type: 'scheduled',
+        messageId: message.id,
+        userId,
+        sessionName,
+        phone: message.phone,
+        content: message.content,
+        contactId: message.contact_id,
+      }, { delay: Math.max(0, delay) })
+      await messageRepository.updateJobId(message.id, userId, jobId || null)
+      return message
+    }
 
-    if (input.scheduled_at) {
-      const scheduledDate = new Date(input.scheduled_at)
-      if (scheduledDate > new Date()) {
-        const delay = scheduledDate.getTime() - Date.now()
-        const jobId = await messageQueue.add('send-message', {
-          type: 'scheduled',
-          messageId: message.id,
-          userId,
-          sessionName,
-          phone: message.phone,
-          content: message.content,
-          contactId: message.contact_id,
-          recurrenceCron: cron,
-        }, { delay: Math.max(0, delay) })
-        await messageRepository.updateJobId(message.id, userId, jobId || null)
+    let finalContent = message.content
+    if (message.contact_id) {
+      const contact = await contactRepository.findById(message.contact_id, userId)
+      if (contact) {
+        finalContent = replaceVariables(message.content, contact)
       }
     }
 
-    await messageQueue.addRecurring(schedulerId, {
-      type: 'recurring',
-      messageId: message.id,
-      userId,
-      sessionName,
-      phone: message.phone,
-      content: message.content,
-      contactId: message.contact_id,
-      recurrenceCron: cron,
-    }, cron)
+    const result = await whatsappService.send(sessionName, message.phone, finalContent)
 
-    await messageRepository.updateJobId(message.id, userId, schedulerId)
+    if (result.success) {
+      await messageRepository.updateStatus(message.id, userId, 'sent')
+      await messageRepository.updateWaMessageId(message.id, userId, result.id || null)
+      await messageLogRepository.create({
+        messageId: message.id,
+        userId,
+        event: 'sent',
+        wahaMessageId: result.id,
+      })
+    } else {
+      await messageRepository.updateStatus(message.id, userId, 'failed')
+      await messageLogRepository.create({
+        messageId: message.id,
+        userId,
+        event: 'failed',
+        metadata: { error: result.error },
+      })
+    }
 
     return message
   },
