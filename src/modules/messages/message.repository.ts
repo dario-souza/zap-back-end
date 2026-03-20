@@ -39,9 +39,13 @@ export const messageRepository = {
         contact_id: input.contact_id,
         type: messageType,
         scheduled_at: input.scheduled_at,
-        status: isScheduled ? 'SCHEDULED' : 'PENDING',
+        status: isScheduled ? 'scheduled' : 'pending',
         recurrence_type: input.recurrence_type || 'NONE',
         recurrence_cron: input.recurrence_cron,
+        recurrence_day_of_week: input.recurrence_day_of_week,
+        recurrence_day_of_month: input.recurrence_day_of_month,
+        recurrence_hour: input.recurrence_hour,
+        recurrence_minute: input.recurrence_minute,
         reminder_days: input.reminder_days || 0,
         is_reminder: false,
         next_send_at: input.scheduled_at,
@@ -157,7 +161,7 @@ export const messageRepository = {
     const { data, error } = await supabase
       .from('messages')
       .select('*')
-      .eq('status', 'SCHEDULED')
+      .eq('status', 'scheduled')
       .lte('scheduled_at', new Date().toISOString());
 
     if (error) throw error;
@@ -171,7 +175,7 @@ export const messageRepository = {
     const { data, error } = await supabase
       .from('messages')
       .select('*')
-      .eq('status', 'SCHEDULED')
+      .eq('status', 'scheduled')
       .gt('reminder_days', 0)
       .eq('reminder_sent', false)
       .lte('scheduled_at', reminderThreshold.toISOString());
@@ -185,7 +189,6 @@ export const messageRepository = {
       .from('messages')
       .select('*')
       .neq('recurrence_type', 'NONE')
-      .neq('status', 'CANCELLED')
       .neq('status', 'cancelled');
 
     if (error) throw error;

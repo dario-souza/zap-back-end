@@ -1,48 +1,14 @@
 import { Worker, Job } from 'bullmq'
-import { supabase } from '../config/supabase.ts'
 import { whatsappService } from '../integrations/whatsapp/whatsapp.service.ts'
 import { redisConnection } from '../config/redis.ts'
 import { messageRepository } from '../modules/messages/message.repository.ts'
+import { contactRepository } from '../modules/contacts/contact.repository.ts'
 import { messageLogRepository } from '../modules/messages/message-log.repository.ts'
+import { calculateNextSendAt } from '../shared/utils/calcNextRun.ts'
 import type { JobPayload } from './job.types.ts'
 
 const WHATSAPP_MIN_DELAY = 2000
 const WHATSAPP_MAX_DELAY = 5000
-
-const calculateNextSendAt = (cronPattern: string): Date => {
-  const [minutes, hours, dayOfMonth, , dayOfWeek] = cronPattern.split(' ')
-  const now = new Date()
-  const next = new Date(now)
-  
-  next.setMinutes(parseInt(minutes))
-  next.setHours(parseInt(hours))
-  next.setSeconds(0)
-  next.setMilliseconds(0)
-  
-  if (dayOfMonth !== '*') {
-    next.setDate(parseInt(dayOfMonth))
-  }
-  
-  if (dayOfWeek !== '*') {
-    const targetDay = parseInt(dayOfWeek)
-    const currentDay = next.getDay()
-    let daysToAdd = targetDay - currentDay
-    if (daysToAdd < 0 || (daysToAdd === 0 && next <= now)) {
-      daysToAdd += 7
-    }
-    next.setDate(next.getDate() + daysToAdd)
-  }
-  
-  if (next <= now) {
-    if (dayOfMonth !== '*') {
-      next.setMonth(next.getMonth() + 1)
-    } else if (dayOfWeek !== '*') {
-      next.setDate(next.getDate() + 7)
-    }
-  }
-  
-  return next
-}
 
 const replaceVariables = (
   content: string,
@@ -98,12 +64,7 @@ export const messageWorker = {
           let finalContent = content
 
           if (contactId) {
-            const { data: contact } = await supabase
-              .from('contacts')
-              .select('name, phone, email')
-              .eq('id', contactId)
-              .single()
-
+            const contact = await contactRepository.findById(contactId, userId)
             if (contact) {
               finalContent = replaceVariables(content, contact)
             }
@@ -126,7 +87,7 @@ export const messageWorker = {
                 event: 'sent',
                 wahaMessageId: result.id,
               })
-              
+
               if (recurrenceCron) {
                 const nextSendAt = calculateNextSendAt(recurrenceCron)
                 await messageRepository.updateNextSendAt(messageId, userId, nextSendAt.toISOString())

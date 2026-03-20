@@ -34,7 +34,7 @@ export const confirmationRepository = {
         contact_phone: input.contact_phone,
         event_date: input.event_date,
         message_content: input.message_content,
-        status: input.status || 'PENDING',
+        status: input.status || 'pending',
       })
       .select()
       .single();
@@ -49,7 +49,7 @@ export const confirmationRepository = {
       updated_at: new Date().toISOString(),
     };
 
-    if (input.status === 'CONFIRMED' || input.status === 'DENIED') {
+    if (input.status === 'confirmed' || input.status === 'cancelled') {
       updateData.responded_at = new Date().toISOString();
     }
 

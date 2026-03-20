@@ -33,7 +33,7 @@ export const messageController = {
 
   create: asyncHandler(async (req: AuthRequest, res: Response) => {
     const userId = getUserId(req)
-    const { chatId, body, contactId, templateId, scheduledAt, recurrenceType, recurrenceCron, type } = req.body
+    const { chatId, body, contactId, templateId, scheduledAt, recurrenceType, recurrenceCron, recurrenceDayOfWeek, recurrenceDayOfMonth, recurrenceHour, recurrenceMinute, type } = req.body
     
     const input: CreateMessageDto = {
       phone: chatId?.replace('@c.us', '').replace('@g.us', '') || '',
@@ -43,6 +43,10 @@ export const messageController = {
       scheduled_at: scheduledAt,
       recurrence_type: recurrenceType || 'NONE',
       recurrence_cron: recurrenceCron,
+      recurrence_day_of_week: recurrenceDayOfWeek,
+      recurrence_day_of_month: recurrenceDayOfMonth,
+      recurrence_hour: recurrenceHour,
+      recurrence_minute: recurrenceMinute,
     }
     
     const message = await messageService.create(userId, input)

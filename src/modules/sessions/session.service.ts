@@ -17,18 +17,27 @@ export const sessionService = {
   },
 
   async start(userId: string) {
-    const session = await this.getOrCreate(userId)
+    try {
+      await whatsappService.delete(userId)
+    } catch {
+      // ignora se nao existir
+    }
+    await sessionRepository.delete(userId)
+
+    const sessionName = this.generateSessionName(userId)
+    const session = await sessionRepository.create(userId, sessionName)
+
     const webhookUrl = env.WAHA_WEBHOOK_URL || `${env.BACKEND_URL}/api/webhooks/waha`
     const result = await whatsappService.createOrStart(userId, webhookUrl)
-    
+
     if (!result.success) {
       throw new Error(result.error || 'Erro ao iniciar sessão WAHA')
     }
 
-    await sessionRepository.update(userId, { 
-      status: this.mapWahaStatus(result.status || 'starting') 
+    await sessionRepository.update(userId, {
+      status: this.mapWahaStatus(result.status || 'starting')
     })
-    
+
     return session
   },
 

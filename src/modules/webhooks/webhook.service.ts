@@ -27,7 +27,7 @@ const handleIncomingMessage = async (
     .select('*')
     .eq('user_id', userId)
     .eq('contact_phone', phone)
-    .eq('status', 'PENDING')
+    .eq('status', 'pending')
     .limit(1)
 
   if (!confirmations || confirmations.length === 0) {
@@ -43,7 +43,7 @@ const handleIncomingMessage = async (
     await supabase
       .from('confirmations')
       .update({
-        status: 'CONFIRMED',
+        status: 'confirmed',
         response: text,
         updated_at: new Date().toISOString(),
       })
@@ -53,7 +53,7 @@ const handleIncomingMessage = async (
     await supabase
       .from('confirmations')
       .update({
-        status: 'CANCELLED',
+        status: 'cancelled',
         response: text,
         updated_at: new Date().toISOString(),
       })
@@ -92,9 +92,9 @@ const handleMessageAck = async (payload: WahaWebhookPayload): Promise<void> => {
   if (!messageId) return
 
   const statusMap: Record<number, string> = {
-    1: 'SENT',
-    2: 'DELIVERED',
-    3: 'READ',
+    1: 'sent',
+    2: 'delivered',
+    3: 'read',
   }
 
   const status = statusMap[ack || 0]

@@ -1,4 +1,4 @@
-export type MessageStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'failed' | 'cancelled' | 'PENDING' | 'SCHEDULED' | 'SENT' | 'DELIVERED' | 'READ' | 'FAILED' | 'CANCELLED';
+export type MessageStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'failed' | 'cancelled' | 'scheduled';
 export type RecurrenceType = 'NONE' | 'WEEKLY' | 'MONTHLY';
 export type MessageType = 'instant' | 'scheduled' | 'recurring';
 
@@ -16,6 +16,10 @@ export interface Message {
   updated_at: string;
   recurrence_type: RecurrenceType;
   recurrence_cron?: string;
+  recurrence_day_of_week?: number;
+  recurrence_day_of_month?: number;
+  recurrence_hour?: number;
+  recurrence_minute?: number;
   reminder_days: number;
   is_reminder: boolean;
   parent_message_id?: string;
@@ -33,6 +37,10 @@ export interface CreateMessageDto {
   scheduled_at?: string;
   recurrence_type?: RecurrenceType;
   recurrence_cron?: string;
+  recurrence_day_of_week?: number;
+  recurrence_day_of_month?: number;
+  recurrence_hour?: number;
+  recurrence_minute?: number;
   reminder_days?: number;
   is_reminder?: boolean;
   status?: MessageStatus;

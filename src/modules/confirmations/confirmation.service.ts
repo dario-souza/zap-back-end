@@ -22,7 +22,7 @@ export const confirmationService = {
       contact_phone: contactPhone,
       event_date: eventDate,
       message_content: messageContent,
-      status: 'PENDING' as ConfirmationStatus,
+      status: 'pending' as ConfirmationStatus,
     });
   },
 

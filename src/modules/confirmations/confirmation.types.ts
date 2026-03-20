@@ -1,4 +1,4 @@
-export type ConfirmationStatus = 'PENDING' | 'CONFIRMED' | 'DENIED';
+export type ConfirmationStatus = 'pending' | 'confirmed' | 'cancelled';
 
 export interface Confirmation {
   id: string;
