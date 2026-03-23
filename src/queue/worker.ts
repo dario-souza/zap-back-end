@@ -38,7 +38,9 @@ export const messageWorker = {
   start: async () => {
     try {
       console.log('[Worker] Iniciando worker...')
-      console.log(`[Worker] Delay: ${WHATSAPP_MIN_DELAY}-${WHATSAPP_MAX_DELAY}ms`)
+      console.log(
+        `[Worker] Delay: ${WHATSAPP_MIN_DELAY}-${WHATSAPP_MAX_DELAY}ms`,
+      )
       console.log(`[Worker] Fila: messages`)
 
       worker = new Worker<JobPayload>(
@@ -54,7 +56,7 @@ export const messageWorker = {
         },
         {
           connection: redisConnection as any,
-          concurrency: 10,
+          concurrency: 1,
         },
       )
 
@@ -85,11 +87,22 @@ export const messageWorker = {
 }
 
 async function handleConfirmationJob(job: Job<JobPayload>) {
-  const { confirmationId, userId, sessionName, phone, content, contactId, contactName, eventDate } = job.data
+  const {
+    confirmationId,
+    userId,
+    sessionName,
+    phone,
+    content,
+    contactId,
+    contactName,
+    eventDate,
+  } = job.data
   if (!confirmationId) throw new Error('confirmationId ausente no job')
 
   const humanDelay = getRandomDelay(WHATSAPP_MIN_DELAY, WHATSAPP_MAX_DELAY)
-  console.log(`[Worker] Delay humano: ${humanDelay}ms para confirmação ${confirmationId}`)
+  console.log(
+    `[Worker] Delay humano: ${humanDelay}ms para confirmação ${confirmationId}`,
+  )
   await sleep(humanDelay)
 
   let finalContent = content
@@ -100,12 +113,19 @@ async function handleConfirmationJob(job: Job<JobPayload>) {
     }
   }
 
-  finalContent = finalContent.replace(/\{\{contact_name\}\}/gi, contactName || '')
+  finalContent = finalContent.replace(
+    /\{\{contact_name\}\}/gi,
+    contactName || '',
+  )
   finalContent = finalContent.replace(/\{\{nome\}\}/gi, contactName || '')
   finalContent = finalContent.replace(
     /\{\{event_date\}\}/gi,
     eventDate
-      ? new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(eventDate))
+      ? new Intl.DateTimeFormat('pt-BR', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+        }).format(new Date(eventDate))
       : '',
   )
 
@@ -113,22 +133,38 @@ async function handleConfirmationJob(job: Job<JobPayload>) {
   const result = await whatsappService.send(sessionName, phone, finalContent)
 
   if (result.success && result.id) {
-    const { confirmationRepository } = await import('../modules/confirmations/confirmation.repository.ts')
-    await confirmationRepository.updateMessageStatus(confirmationId, 'sent', result.id)
+    const { confirmationRepository } =
+      await import('../modules/confirmations/confirmation.repository.ts')
+    await confirmationRepository.updateMessageStatus(
+      confirmationId,
+      'sent',
+      result.id,
+    )
     console.log(`[Worker] Confirmação enviada! WAHA ID: ${result.id}`)
     return { success: true, waMessageId: result.id }
   } else {
-    const { confirmationRepository } = await import('../modules/confirmations/confirmation.repository.ts')
+    const { confirmationRepository } =
+      await import('../modules/confirmations/confirmation.repository.ts')
     await confirmationRepository.updateMessageStatus(confirmationId, 'failed')
     throw new Error(result.error || 'Falha ao enviar confirmação')
   }
 }
 
 async function handleMessageJob(job: Job<JobPayload>) {
-  const { messageId, phone, content, userId, sessionName, contactId, recurrenceCron } = job.data
+  const {
+    messageId,
+    phone,
+    content,
+    userId,
+    sessionName,
+    contactId,
+    recurrenceCron,
+  } = job.data
 
   const humanDelay = getRandomDelay(WHATSAPP_MIN_DELAY, WHATSAPP_MAX_DELAY)
-  console.log(`[Worker] Delay humano: ${humanDelay}ms para user ${userId.substring(0, 8)}`)
+  console.log(
+    `[Worker] Delay humano: ${humanDelay}ms para user ${userId.substring(0, 8)}`,
+  )
   await sleep(humanDelay)
 
   let finalContent = content
@@ -145,9 +181,15 @@ async function handleMessageJob(job: Job<JobPayload>) {
 
   if (result.success && result.id) {
     if (messageId) {
-      const updated = await messageRepository.updateStatus(messageId, userId, 'sent')
+      const updated = await messageRepository.updateStatus(
+        messageId,
+        userId,
+        'sent',
+      )
       if (!updated) {
-        console.warn(`[Worker] Mensagem ${messageId} não encontrada — pulando update`)
+        console.warn(
+          `[Worker] Mensagem ${messageId} não encontrada — pulando update`,
+        )
       } else {
         await messageRepository.updateWaMessageId(messageId, userId, result.id)
         await messageLogRepository.create({
@@ -159,7 +201,11 @@ async function handleMessageJob(job: Job<JobPayload>) {
 
         if (recurrenceCron) {
           const nextSendAt = calculateNextSendAt(recurrenceCron)
-          await messageRepository.updateNextSendAt(messageId, userId, nextSendAt.toISOString())
+          await messageRepository.updateNextSendAt(
+            messageId,
+            userId,
+            nextSendAt.toISOString(),
+          )
         }
       }
     }

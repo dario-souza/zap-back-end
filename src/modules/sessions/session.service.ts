@@ -111,7 +111,8 @@ export const sessionService = {
   },
 
   async logout(userId: string) {
-    await whatsappService.disconnect(userId)
+    // Deletar sessão do WAHA (mais definitivo que só disconnect)
+    await whatsappService.delete(userId)
     await sessionRepository.delete(userId)
     return { success: true, message: 'Sessão desconectada e removida' }
   },
