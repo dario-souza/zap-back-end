@@ -32,7 +32,7 @@ export const confirmationController = {
 
   create: asyncHandler(async (req: AuthRequest, res: Response) => {
     const userId = getUserId(req)
-    const { contactName, contactPhone, eventDate, messageContent } = req.body
+    const { contactName, contactPhone, eventDate, sendAt, messageContent, contactId } = req.body
 
     if (!contactName || !contactPhone || !eventDate) {
       res.status(400).json({
@@ -46,7 +46,9 @@ export const confirmationController = {
       contactName,
       contactPhone,
       eventDate,
+      sendAt,
       messageContent,
+      contactId,
     )
     res.status(201).json(confirmation)
   }),
@@ -70,10 +72,23 @@ export const confirmationController = {
     res.json(confirmation)
   }),
 
+  sendNow: asyncHandler(async (req: AuthRequest, res: Response) => {
+    const userId = getUserId(req)
+    const { id } = req.params
+    await confirmationService.sendNow(id, userId)
+    res.status(204).send()
+  }),
+
   delete: asyncHandler(async (req: AuthRequest, res: Response) => {
     const userId = getUserId(req)
     const { id } = req.params
     await confirmationService.delete(id, userId)
     res.status(204).send()
+  }),
+
+  deleteAll: asyncHandler(async (req: AuthRequest, res: Response) => {
+    const userId = getUserId(req)
+    const count = await confirmationService.deleteAll(userId)
+    res.json({ deleted: count })
   }),
 }

@@ -4,6 +4,8 @@ import { authMiddleware } from '../auth/auth.middleware'
 
 export const sessionRoutes = Router()
 
+sessionRoutes.get('/stream', sessionController.stream as any)
+
 sessionRoutes.use(authMiddleware)
 
 sessionRoutes.get('/', sessionController.get)

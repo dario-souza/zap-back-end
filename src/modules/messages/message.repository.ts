@@ -58,7 +58,7 @@ export const messageRepository = {
     return data;
   },
 
-  async update(id: string, userId: string, input: Partial<UpdateMessageDto> & { job_id?: string }): Promise<Message> {
+  async update(id: string, userId: string, input: Partial<UpdateMessageDto> & { job_id?: string }): Promise<Message | null> {
     const { data, error } = await supabase
       .from('messages')
       .update({
@@ -68,13 +68,16 @@ export const messageRepository = {
       .eq('id', id)
       .eq('user_id', userId)
       .select()
-      .single();
+      .maybeSingle();
 
-    if (error) throw error;
-    return data;
+    if (error) {
+      console.error('[Repository] update error:', error.message)
+      return null
+    }
+    return data
   },
 
-  async updateStatus(id: string, userId: string, status: MessageStatus): Promise<Message> {
+  async updateStatus(id: string, userId: string, status: MessageStatus): Promise<Message | null> {
     const { data, error } = await supabase
       .from('messages')
       .update({
@@ -84,13 +87,16 @@ export const messageRepository = {
       .eq('id', id)
       .eq('user_id', userId)
       .select()
-      .single();
+      .maybeSingle();
 
-    if (error) throw error;
-    return data;
+    if (error) {
+      console.error('[Repository] updateStatus error:', error.message)
+      return null
+    }
+    return data
   },
 
-  async updateJobId(id: string, userId: string, jobId: string | null): Promise<Message> {
+  async updateJobId(id: string, userId: string, jobId: string | null): Promise<Message | null> {
     const { data, error } = await supabase
       .from('messages')
       .update({
@@ -100,13 +106,16 @@ export const messageRepository = {
       .eq('id', id)
       .eq('user_id', userId)
       .select()
-      .single();
+      .maybeSingle();
 
-    if (error) throw error;
-    return data;
+    if (error) {
+      console.error('[Repository] updateJobId error:', error.message)
+      return null
+    }
+    return data
   },
 
-  async updateWaMessageId(id: string, userId: string, waMessageId: string | null): Promise<Message> {
+  async updateWaMessageId(id: string, userId: string, waMessageId: string | null): Promise<Message | null> {
     const { data, error } = await supabase
       .from('messages')
       .update({
@@ -116,13 +125,16 @@ export const messageRepository = {
       .eq('id', id)
       .eq('user_id', userId)
       .select()
-      .single();
+      .maybeSingle();
 
-    if (error) throw error;
-    return data;
+    if (error) {
+      console.error('[Repository] updateWaMessageId error:', error.message)
+      return null
+    }
+    return data
   },
 
-  async updateNextSendAt(id: string, userId: string, nextSendAt: string): Promise<Message> {
+  async updateNextSendAt(id: string, userId: string, nextSendAt: string): Promise<Message | null> {
     const { data, error } = await supabase
       .from('messages')
       .update({
@@ -132,10 +144,13 @@ export const messageRepository = {
       .eq('id', id)
       .eq('user_id', userId)
       .select()
-      .single();
+      .maybeSingle();
 
-    if (error) throw error;
-    return data;
+    if (error) {
+      console.error('[Repository] updateNextSendAt error:', error.message)
+      return null
+    }
+    return data
   },
 
   async delete(id: string, userId: string): Promise<void> {

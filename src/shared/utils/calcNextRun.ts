@@ -1,46 +1,33 @@
-import type { RecurrenceConfig } from '../../queue/job.types'
-
-export function buildCronExpression(recurrence: RecurrenceConfig, hour = 9): string {
-  if (recurrence.frequency === 'weekly') {
-    return `0 ${hour} * * ${recurrence.dayOfWeek}`
-  }
-
-  if (recurrence.frequency === 'monthly') {
-    return `0 ${hour} ${recurrence.dayOfMonth} * *`
-  }
-
-  throw new Error(`Frequência de recorrência inválida: ${(recurrence as any).frequency}`)
-}
-
 export function calculateNextSendAt(cronPattern: string): Date {
-  const [minutes, hours, dayOfMonth, , dayOfWeek] = cronPattern.split(' ')
+  const [minutesStr, hoursStr, dayOfMonthStr, , dayOfWeekStr] = cronPattern.split(' ')
   const now = new Date()
+
+  const utcHour = parseInt(hoursStr)
+  const utcMinute = parseInt(minutesStr)
+
   const next = new Date(now)
+  next.setUTCHours(utcHour, utcMinute, 0, 0)
 
-  next.setMinutes(parseInt(minutes))
-  next.setHours(parseInt(hours))
-  next.setSeconds(0)
-  next.setMilliseconds(0)
-
-  if (dayOfMonth !== '*') {
-    next.setDate(parseInt(dayOfMonth))
+  if (dayOfMonthStr !== '*') {
+    const targetDate = parseInt(dayOfMonthStr)
+    next.setUTCDate(targetDate)
   }
 
-  if (dayOfWeek !== '*') {
-    const targetDay = parseInt(dayOfWeek)
-    const currentDay = next.getDay()
+  if (dayOfWeekStr !== '*') {
+    const targetDay = parseInt(dayOfWeekStr)
+    const currentDay = next.getUTCDay()
     let daysToAdd = targetDay - currentDay
-    if (daysToAdd < 0 || (daysToAdd === 0 && next <= now)) {
+    if (daysToAdd < 0 || (daysToAdd === 0 && next.getTime() <= now.getTime())) {
       daysToAdd += 7
     }
-    next.setDate(next.getDate() + daysToAdd)
+    next.setUTCDate(next.getUTCDate() + daysToAdd)
   }
 
-  if (next <= now) {
-    if (dayOfMonth !== '*') {
-      next.setMonth(next.getMonth() + 1)
-    } else if (dayOfWeek !== '*') {
-      next.setDate(next.getDate() + 7)
+  if (next.getTime() <= now.getTime()) {
+    if (dayOfMonthStr !== '*') {
+      next.setUTCMonth(next.getUTCMonth() + 1)
+    } else if (dayOfWeekStr !== '*') {
+      next.setUTCDate(next.getUTCDate() + 7)
     }
   }
 

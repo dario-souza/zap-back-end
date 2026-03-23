@@ -1,5 +1,5 @@
 import { supabase } from '../../config/supabase.ts';
-import type { Confirmation, CreateConfirmationDto, UpdateConfirmationDto } from './confirmation.types.ts';
+import type { Confirmation, CreateConfirmationDto, UpdateConfirmationDto, ConfirmationMessageStatus } from './confirmation.types.ts';
 
 export const confirmationRepository = {
   async findAll(userId: string): Promise<Confirmation[]> {
@@ -19,7 +19,18 @@ export const confirmationRepository = {
       .select('*')
       .eq('id', id)
       .eq('user_id', userId)
-      .single();
+      .maybeSingle();
+
+    if (error) return null;
+    return data;
+  },
+
+  async findByWaMessageId(waMessageId: string): Promise<Confirmation | null> {
+    const { data, error } = await supabase
+      .from('confirmations')
+      .select('*')
+      .eq('wa_message_id', waMessageId)
+      .maybeSingle();
 
     if (error) return null;
     return data;
@@ -30,16 +41,20 @@ export const confirmationRepository = {
       .from('confirmations')
       .insert({
         user_id: userId,
+        contact_id: input.contact_id ?? null,
         contact_name: input.contact_name,
         contact_phone: input.contact_phone,
         event_date: input.event_date,
-        message_content: input.message_content,
+        send_at: input.send_at ?? null,
+        message_content: input.message_content ?? null,
         status: input.status || 'pending',
+        message_status: 'pending',
       })
       .select()
-      .single();
+      .maybeSingle();
 
     if (error) throw error;
+    if (!data) throw new Error('Erro ao criar confirmação');
     return data;
   },
 
@@ -59,10 +74,34 @@ export const confirmationRepository = {
       .eq('id', id)
       .eq('user_id', userId)
       .select()
-      .single();
+      .maybeSingle();
 
     if (error) throw error;
+    if (!data) throw new Error('Confirmação não encontrada');
     return data;
+  },
+
+  async updateJobId(id: string, userId: string, jobId: string): Promise<void> {
+    const { error } = await supabase
+      .from('confirmations')
+      .update({ job_id: jobId, message_status: 'queued', updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .eq('user_id', userId);
+
+    if (error) throw error;
+  },
+
+  async updateMessageStatus(id: string, messageStatus: ConfirmationMessageStatus, waMessageId?: string): Promise<void> {
+    const { error } = await supabase
+      .from('confirmations')
+      .update({
+        message_status: messageStatus,
+        wa_message_id: waMessageId,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id);
+
+    if (error) throw error;
   },
 
   async delete(id: string, userId: string): Promise<void> {
@@ -73,5 +112,16 @@ export const confirmationRepository = {
       .eq('user_id', userId);
 
     if (error) throw error;
+  },
+
+  async deleteAll(userId: string): Promise<number> {
+    const { data, error } = await supabase
+      .from('confirmations')
+      .delete()
+      .eq('user_id', userId)
+      .select('id');
+
+    if (error) throw error;
+    return data?.length ?? 0;
   },
 };

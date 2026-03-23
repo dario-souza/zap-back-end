@@ -18,12 +18,8 @@ export const env = {
   WAHA_API_URL: required('WAHA_API_URL'),
   WAHA_API_KEY: required('WAHA_API_KEY'),
   WAHA_URL: required('WAHA_API_URL'),
+  WAHA_WS_URL: required('WAHA_WS_URL'),
   WAHA_SESSION_NAME: process.env.WAHA_SESSION_NAME ?? 'default',
-  WAHA_WEBHOOK_URL: process.env.WAHA_WEBHOOK_URL,
+  WAHA_WEBHOOK_URL: required('WAHA_WEBHOOK_URL'),
   JWT_SECRET: required('JWT_SECRET'),
-  FRONTEND_URL: process.env.FRONTEND_URL ?? 'http://localhost:3000',
-  BACKEND_URL: process.env.BACKEND_URL ?? 'http://localhost:3001',
-  ALLOWED_ORIGINS: process.env.ALLOWED_ORIGINS?.split(',') ?? [
-    'http://localhost:3000',
-  ],
 }

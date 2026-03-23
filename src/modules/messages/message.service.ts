@@ -91,23 +91,7 @@ export const messageService = {
       const cron = buildCronFromInput(input)
       const schedulerId = `recurring_${message.id}`
 
-      if (input.scheduled_at) {
-        const scheduledDate = new Date(input.scheduled_at)
-        if (scheduledDate > new Date()) {
-          const delay = scheduledDate.getTime() - Date.now()
-          const jobId = await messageQueue.add('send-message', {
-            type: 'scheduled',
-            messageId: message.id,
-            userId,
-            sessionName,
-            phone: message.phone,
-            content: message.content,
-            contactId: message.contact_id,
-            recurrenceCron: cron,
-          }, { delay: Math.max(0, delay) })
-          await messageRepository.updateJobId(message.id, userId, jobId || null)
-        }
-      }
+      await messageRepository.update(message.id, userId, { recurrence_cron: cron } as any)
 
       await messageQueue.addRecurring(schedulerId, {
         type: 'recurring',
@@ -120,7 +104,6 @@ export const messageService = {
         recurrenceCron: cron,
       }, cron)
 
-      await messageRepository.updateJobId(message.id, userId, schedulerId)
       return message
     }
 
@@ -171,7 +154,7 @@ export const messageService = {
     return message
   },
 
-  async update(id: string, userId: string, input: UpdateMessageDto): Promise<Message> {
+  async update(id: string, userId: string, input: UpdateMessageDto): Promise<Message | null> {
     return messageRepository.update(id, userId, input)
   },
 
@@ -216,10 +199,46 @@ export const messageService = {
   },
 
   async deleteAll(userId: string): Promise<void> {
+    const messages = await messageRepository.findAll(userId)
+
+    for (const message of messages) {
+      if (message.job_id) {
+        if (message.job_id.startsWith('recurring_')) {
+          await messageQueue.removeRecurring(message.job_id)
+        } else {
+          const job = await messageQueue.getJob(message.job_id)
+          if (job) {
+            await job.remove()
+          }
+        }
+      }
+    }
+
     return messageRepository.deleteAll(userId)
   },
 
-  async cancel(id: string, userId: string): Promise<Message> {
+  async deleteAllScheduled(userId: string): Promise<number> {
+    const messages = await messageRepository.findAll(userId)
+    const scheduledMessages = messages.filter(
+      (m) =>
+        m.recurrence_type === 'NONE' &&
+        m.scheduled_at !== null
+    )
+
+    for (const message of scheduledMessages) {
+      if (message.job_id) {
+        const job = await messageQueue.getJob(message.job_id)
+        if (job) {
+          await job.remove()
+        }
+      }
+      await messageRepository.delete(message.id, userId)
+    }
+
+    return scheduledMessages.length
+  },
+
+  async cancel(id: string, userId: string): Promise<Message | null> {
     const message = await messageRepository.findById(id, userId)
 
     if (!message) {

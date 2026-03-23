@@ -27,8 +27,7 @@ export const sessionService = {
     const sessionName = this.generateSessionName(userId)
     const session = await sessionRepository.create(userId, sessionName)
 
-    const webhookUrl = env.WAHA_WEBHOOK_URL || `${env.BACKEND_URL}/api/webhooks/waha`
-    const result = await whatsappService.createOrStart(userId, webhookUrl)
+    const result = await whatsappService.createOrStart(userId, env.WAHA_WEBHOOK_URL)
 
     if (!result.success) {
       throw new Error(result.error || 'Erro ao iniciar sessão WAHA')
@@ -54,12 +53,11 @@ export const sessionService = {
 
   async getQRCode(userId: string, retryCount = 0): Promise<{ qr?: string | null; connected?: boolean; message?: string; status?: string; isPairingCode?: boolean }> {
     const maxRetries = 2
-    const webhookUrl = env.WAHA_WEBHOOK_URL || `${env.BACKEND_URL}/api/webhooks/waha`
     
     try {
       const session = await this.getOrCreate(userId)
       
-      const startResult = await whatsappService.createOrStart(userId, webhookUrl)
+      const startResult = await whatsappService.createOrStart(userId, env.WAHA_WEBHOOK_URL)
       
       if (!startResult.success) {
         if (startResult.error && startResult.error.includes('FAILED')) {

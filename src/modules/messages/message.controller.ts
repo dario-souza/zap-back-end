@@ -87,6 +87,12 @@ export const messageController = {
     res.json({ deleted: count })
   }),
 
+  deleteAllScheduled: asyncHandler(async (req: AuthRequest, res: Response) => {
+    const userId = getUserId(req)
+    const count = await messageService.deleteAllScheduled(userId)
+    res.json({ deleted: count })
+  }),
+
   sendNow: asyncHandler(async (req: AuthRequest, res: Response) => {
     const userId = getUserId(req)
     const { id } = req.params

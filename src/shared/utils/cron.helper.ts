@@ -62,7 +62,7 @@ export const WEEKDAY_LABELS: Record<number, string> = {
   6: 'Sábado',
 }
 
-export function formatRecurrenceLabel(recurrenceType: string, recurrenceCron?: string): string {
+export function formatRecurrenceLabel(recurrenceCron?: string): string {
   if (!recurrenceCron) return ''
 
   const config = parseCronExpression(recurrenceCron)

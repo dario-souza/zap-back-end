@@ -2,6 +2,8 @@ import { Response } from 'express'
 import { sessionService } from './session.service'
 import { asyncHandler } from '../../shared/utils/asyncHandler'
 import type { AuthRequest } from '../auth/auth.types'
+import { supabase } from '../../config/supabase'
+import { registerSseConnection, unregisterSseConnection } from './sseStore'
 
 export const sessionController = {
   get: asyncHandler(async (req: AuthRequest, res: Response) => {
@@ -25,6 +27,7 @@ export const sessionController = {
     const session = await sessionService.start(userId)
     res.status(200).json({ 
       success: true, 
+      sessionName: (session as any).session_name,
       status: session.status,
       message: session.status === 'working' 
         ? 'Sessão já está conectada!' 
@@ -55,12 +58,14 @@ export const sessionController = {
     }
 
     const status = await sessionService.getStatus(userId)
+    const session = await sessionService.getOrCreate(userId)
     res.json({
       connected: status.connected,
       status: status.status,
       error: status.error,
       phone: status.phone,
       pushName: status.pushName,
+      sessionName: (session as any).session_name ?? null,
     })
   }),
 
@@ -85,4 +90,36 @@ export const sessionController = {
     await sessionService.logout(userId)
     res.status(200).json({ success: true, message: 'Sessão desconectada com sucesso' })
   }),
+
+  stream: (req: AuthRequest, res: Response) => {
+    const token = req.query.token as string | undefined
+    const sessionName = req.query.sessionName as string | undefined
+
+    if (!token || !sessionName) {
+      res.status(400).json({ error: 'token e sessionName são obrigatórios' })
+      return
+    }
+
+    supabase.auth.getUser(token).then(async ({ data, error }) => {
+      if (error || !data.user) {
+        res.status(401).json({ error: 'Token inválido ou expirado' })
+        return
+      }
+
+      res.setHeader('Content-Type', 'text/event-stream')
+      res.setHeader('Cache-Control', 'no-cache')
+      res.setHeader('Connection', 'keep-alive')
+      res.setHeader('X-Accel-Buffering', 'no')
+      res.flushHeaders()
+
+      registerSseConnection(sessionName, res, data.user.id)
+
+      res.write(`event: connected\n`)
+      res.write(`data: ${JSON.stringify({ ok: true })}\n\n`)
+
+      req.on('close', () => {
+        unregisterSseConnection(sessionName)
+      })
+    })
+  },
 }

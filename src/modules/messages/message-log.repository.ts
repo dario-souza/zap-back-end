@@ -19,7 +19,7 @@ interface CreateMessageLogDto {
 }
 
 export const messageLogRepository = {
-  async create(input: CreateMessageLogDto): Promise<MessageLog> {
+  async create(input: CreateMessageLogDto): Promise<MessageLog | null> {
     const { data, error } = await supabase
       .from('message_logs')
       .insert({
@@ -30,9 +30,12 @@ export const messageLogRepository = {
         metadata: input.metadata || {},
       })
       .select()
-      .single()
+      .maybeSingle()
 
-    if (error) throw error
+    if (error) {
+      console.error('[Repository] messageLog.create error:', error.message)
+      return null
+    }
     return data
   },
 

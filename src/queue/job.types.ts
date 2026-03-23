@@ -3,7 +3,7 @@ export type RecurrenceConfig =
   | { frequency: 'monthly'; dayOfMonth: number }
 
 export type JobPayload = {
-  type: 'scheduled' | 'recurring' | 'instant_bulk'
+  type: 'scheduled' | 'recurring' | 'instant_bulk' | 'confirmation'
   messageId: string
   userId: string
   sessionName: string
@@ -13,4 +13,7 @@ export type JobPayload = {
   scheduledAt?: string
   recurrence?: RecurrenceConfig
   recurrenceCron?: string
+  confirmationId?: string
+  contactName?: string
+  eventDate?: string
 }

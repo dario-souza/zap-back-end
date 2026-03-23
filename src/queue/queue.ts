@@ -14,7 +14,7 @@ const getQueue = (): Queue => {
         attempts: 3,
         backoff: {
           type: 'exponential',
-          delay: 5000,
+          delay: 1000,
         },
         removeOnComplete: { count: 1000 },
         removeOnFail: { count: 500 },
@@ -32,9 +32,7 @@ export const messageQueue = {
   ): Promise<string | undefined> {
     const queue = getQueue()
 
-    console.log(
-      `[Queue] Criando job na fila: ${QUEUE_NAME}, userId: ${data.userId}`,
-    )
+    console.log(`[Queue] Criando job na fila: ${QUEUE_NAME}, userId: ${data.userId}`)
 
     const job = await queue.add(jobName, data, {
       delay: options?.delay,
@@ -52,6 +50,14 @@ export const messageQueue = {
     return this.add('send-message', data, { delay: Math.max(0, delay) })
   },
 
+  async addConfirmation(
+    data: JobPayload,
+    scheduledAt: string,
+  ): Promise<string | undefined> {
+    const delay = new Date(scheduledAt).getTime() - Date.now()
+    return this.add('send-confirmation', data, { delay: Math.max(0, delay) })
+  },
+
   async addRecurring(
     schedulerId: string,
     data: JobPayload,
@@ -67,7 +73,7 @@ export const messageQueue = {
         data,
         opts: {
           attempts: 3,
-          backoff: { type: 'exponential', delay: 2000 },
+          backoff: { type: 'exponential', delay: 1000 },
         },
       },
     )

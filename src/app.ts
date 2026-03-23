@@ -8,26 +8,30 @@ import { contactRoutes } from './modules/contacts/contact.routes'
 import { sessionRoutes } from './modules/sessions/session.routes'
 import { templateRoutes } from './modules/templates/template.routes'
 import { confirmationRoutes } from './modules/confirmations/confirmation.routes'
-import { webhookRoutes } from './modules/webhooks/webhook.routes'
 import { authRoutes } from './modules/auth/auth.routes'
 import { userRoutes } from './modules/users/user.routes'
 import { errorHandler } from './shared/errors/errorHandler'
 import { wahaRoutes } from './modules/waha/waha.routes'
 import { wahaWebhookRoutes } from './modules/waha/waha-webhook.routes'
+import { env } from './config/env'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 const app = express()
 
-const corsOptions: cors.CorsOptions = {
-  origin: true,
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-}
+app.use(cors({ origin: true, credentials: true }))
 
-app.use(cors(corsOptions))
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*')
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS')
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With')
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200)
+  }
+  next()
+})
+
 app.use(express.json())
 
 app.use(express.static(path.join(__dirname, '../public')))
@@ -38,7 +42,6 @@ app.use('/api/sessions', sessionRoutes)
 app.use('/api/templates', templateRoutes)
 app.use('/api/confirmations', confirmationRoutes)
 app.use('/api/webhooks/waha', wahaWebhookRoutes)
-app.use('/api/webhooks', webhookRoutes)
 app.use('/api/auth', authRoutes)
 app.use('/api/users', userRoutes)
 app.use('/waha', wahaRoutes)

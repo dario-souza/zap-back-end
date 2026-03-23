@@ -438,4 +438,39 @@ export const whatsappService = {
       return { success: false, error: String(error) }
     }
   },
+
+  async updateWebhook(sessionName: string, webhookUrl: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const response = await fetch(
+        `${WAHA_URL}/api/sessions/${sessionName}`,
+        {
+          method: 'PUT',
+          headers: getHeaders(),
+          body: JSON.stringify({
+            config: {
+              webhooks: [{
+                url: webhookUrl,
+                events: ['session.status', 'message', 'message.any', 'message.ack'],
+                retries: {
+                  policy: 'exponential',
+                  delaySeconds: 2,
+                  attempts: 15,
+                },
+              }]
+            }
+          }),
+        }
+      )
+
+      if (response.ok) {
+        console.log('[WAHA] Webhook atualizado na sessão:', sessionName)
+        return { success: true }
+      }
+
+      const error = await response.text()
+      return { success: false, error }
+    } catch (error) {
+      return { success: false, error: String(error) }
+    }
+  },
 }
