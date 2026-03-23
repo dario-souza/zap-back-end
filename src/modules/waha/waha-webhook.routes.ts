@@ -14,6 +14,44 @@ const extractUserIdFromSession = (sessionName: string): string | null => {
   return uuid.replace(/_/g, '-')
 }
 
+const WAHA_URL = process.env.WAHA_URL || 'https://waha1.ux.net.br'
+const WAHA_API_KEY = process.env.WAHA_API_KEY || ''
+
+async function resolveLidToPhone(sessionName: string, lid: string): Promise<{ phone?: string; lid?: string } | null> {
+  try {
+    // Escapar @ para %40 ou usar só o número
+    const lidNumber = lid.replace('@lid', '').replace('@c.us', '')
+    
+    const response = await fetch(
+      `${WAHA_URL}/api/${sessionName}/lids/${lidNumber}`,
+      {
+        method: 'GET',
+        headers: {
+          'X-Api-Key': WAHA_API_KEY,
+          'Content-Type': 'application/json',
+        },
+      }
+    )
+
+    if (!response.ok) {
+      console.error('[WAHA] Erro ao buscar lid:', await response.text())
+      return null
+    }
+
+    const data = await response.json()
+    console.log('[WAHA] Dados do LID:', JSON.stringify(data))
+    
+    // O endpoint retorna { lid, pn } onde pn é o phone com @c.us
+    return {
+      phone: data.pn?.replace('@c.us', '').replace('@lid', ''),
+      lid: data.lid,
+    }
+  } catch (error) {
+    console.error('[WAHA] Erro na requisição de lid:', error)
+    return null
+  }
+}
+
 router.post('/', async (req: Request, res: Response) => {
   const { event, session: sessionName, payload } = req.body;
 
@@ -75,10 +113,36 @@ router.post('/', async (req: Request, res: Response) => {
       return
     }
 
-    const phone = payload.from?.replace('@c.us', '').replace(/\D/g, '') || ''
+    // Ignorar mensagens enviadas pelo próprio usuário (fromMe: true)
+    // Apenas processar mensagens recebidas (fromMe: false) que são respostas dos contatos
+    if (payload.fromMe === true) {
+      console.log('[WAHA] Mensagem enviada pelo usuário, ignorando')
+      res.json({ ok: true })
+      return
+    }
+
+    // Phone que veio do WAHA
+    const rawPhone = payload.from?.replace('@c.us', '').replace('@lid', '') || ''
+    let phone = rawPhone.replace(/\D/g, '')
+
+    // Se o phone veio no formato @lid (ID do WhatsApp), precisamos resolver para o número real
+    if (payload.from?.includes('@lid')) {
+      console.log('[WAHA] Detectado formato @lid, buscando número real...')
+      try {
+        const contactInfo = await resolveLidToPhone(sessionName, payload.from)
+        if (contactInfo?.phone) {
+          phone = contactInfo.phone.replace(/\D/g, '')
+          console.log('[WAHA] Número resolvedo via API:', phone)
+        }
+      } catch (err) {
+        console.error('[WAHA] Erro ao resolver lid:', err)
+      }
+    }
+
     const texto = payload.body?.toLowerCase().trim() || ''
 
-    console.log('[WAHA] phone do WAHA:', phone)
+    console.log('[WAHA] phone raw do WAHA:', rawPhone)
+    console.log('[WAHA] phone normalizado do WAHA:', phone)
 
     const { data: confirmations } = await supabase
       .from('confirmations')
@@ -89,10 +153,18 @@ router.post('/', async (req: Request, res: Response) => {
 
     console.log('[WAHA] confirmações pendentes:', confirmations?.length)
     if (confirmations && confirmations.length > 0) {
-      console.log('[WAHA] phones no banco:', confirmations.map(c => c.contact_phone))
+    console.log('[WAHA] phones no banco:', confirmations.map(c => c.contact_phone.replace(/\D/g, '')))
     }
 
-    const confirmation = confirmations?.find(c => c.contact_phone.replace(/\D/g, '') === phone)
+    // Função para normalizar telefone para comparação
+    const normalizePhone = (p: string) => p.replace(/\D/g, '')
+    
+    // Buscar confirmação pelo phone normalizado (comparação flexível)
+    const confirmation = confirmations?.find(c => {
+      const bankPhone = normalizePhone(c.contact_phone)
+      // Verificar se algum contém o outro (para números que podem ter formato diferente)
+      return bankPhone.includes(phone) || phone.includes(bankPhone)
+    })
 
     if (!confirmation) {
       console.log('[WAHA] nenhuma confirmação encontrada para phone:', phone)
@@ -112,6 +184,7 @@ router.post('/', async (req: Request, res: Response) => {
         .update({
           status: novoStatus,
           response: payload.body,
+          responded_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         })
         .eq('id', confirmation.id)
