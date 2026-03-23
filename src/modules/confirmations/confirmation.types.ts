@@ -16,6 +16,7 @@ export interface Confirmation {
   responded_at?: string;
   wa_message_id?: string;
   job_id?: string;
+  expires_at?: string;
   created_at: string;
   updated_at: string;
 }
@@ -28,6 +29,7 @@ export interface CreateConfirmationDto {
   send_at?: string;
   message_content?: string;
   status?: ConfirmationStatus;
+  expires_at?: string;
 }
 
 export interface UpdateConfirmationDto {

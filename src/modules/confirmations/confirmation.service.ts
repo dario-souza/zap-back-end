@@ -22,6 +22,7 @@ export const confirmationService = {
     sendAt: string | undefined,
     messageContent: string | undefined,
     contactId?: string,
+    expiresAt?: string,
   ): Promise<Confirmation> {
     const confirmation = await confirmationRepository.create(userId, {
       contact_id: contactId,
@@ -31,6 +32,7 @@ export const confirmationService = {
       send_at: sendAt,
       message_content: messageContent,
       status: 'pending',
+      expires_at: expiresAt,
     });
 
     const sessionName = sessionService.generateSessionName(userId);

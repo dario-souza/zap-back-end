@@ -49,6 +49,7 @@ export const confirmationRepository = {
         message_content: input.message_content ?? null,
         status: input.status || 'pending',
         message_status: 'pending',
+        expires_at: input.expires_at ?? null,
       })
       .select()
       .maybeSingle();

@@ -38,7 +38,7 @@ async function resolveLidToPhone(sessionName: string, lid: string): Promise<{ ph
       return null
     }
 
-    const data = await response.json()
+    const data = await response.json() as { pn?: string; lid?: string }
     console.log('[WAHA] Dados do LID:', JSON.stringify(data))
     
     // O endpoint retorna { lid, pn } onde pn é o phone com @c.us
@@ -103,71 +103,68 @@ router.post('/', async (req: Request, res: Response) => {
     }
   }
 
-  if (event === 'message.any') {
+  // Evento 'message' - só recebe mensagens de outros (não as que você envia)
+  // Este evento substitui 'message.any' para economizarwebhook calls
+  if (event === 'message') {
     const userId = extractUserIdFromSession(sessionName)
-    console.log('[WAHA] message.any — fromMe:', payload.fromMe, '| userId:', userId, '| body:', payload.body)
 
     if (!userId) {
-      console.log('[WAHA] userId null, ignorando')
       res.json({ ok: true })
       return
     }
 
-    // Ignorar mensagens enviadas pelo próprio usuário (fromMe: true)
-    // Apenas processar mensagens recebidas (fromMe: false) que são respostas dos contatos
-    if (payload.fromMe === true) {
-      console.log('[WAHA] Mensagem enviada pelo usuário, ignorando')
-      res.json({ ok: true })
-      return
-    }
+    const texto = payload.body?.toLowerCase().trim() || ''
+    let phone = ''
 
     // Phone que veio do WAHA
-    const rawPhone = payload.from?.replace('@c.us', '').replace('@lid', '') || ''
-    let phone = rawPhone.replace(/\D/g, '')
-
-    // Se o phone veio no formato @lid (ID do WhatsApp), precisamos resolver para o número real
     if (payload.from?.includes('@lid')) {
-      console.log('[WAHA] Detectado formato @lid, buscando número real...')
+      // Formato LID - preciso resolver para obter o número
       try {
         const contactInfo = await resolveLidToPhone(sessionName, payload.from)
         if (contactInfo?.phone) {
           phone = contactInfo.phone.replace(/\D/g, '')
-          console.log('[WAHA] Número resolvedo via API:', phone)
         }
       } catch (err) {
         console.error('[WAHA] Erro ao resolver lid:', err)
       }
+    } else {
+      // Formato normal - extrair número do @c.us
+      phone = payload.from?.replace('@c.us', '').replace('@lid', '').replace(/\D/g, '') || ''
     }
 
-    const texto = payload.body?.toLowerCase().trim() || ''
+    if (!phone) {
+      console.log('[WAHA] Não foi possível extrair phone da mensagem')
+      res.json({ ok: true })
+      return
+    }
 
-    console.log('[WAHA] phone raw do WAHA:', rawPhone)
-    console.log('[WAHA] phone normalizado do WAHA:', phone)
-
+    // Buscar confirmações pendentes que ainda não expiraram
     const { data: confirmations } = await supabase
       .from('confirmations')
       .select('*')
       .eq('user_id', userId)
       .eq('status', 'pending')
+      .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
       .order('created_at', { ascending: false })
 
-    console.log('[WAHA] confirmações pendentes:', confirmations?.length)
-    if (confirmations && confirmations.length > 0) {
-    console.log('[WAHA] phones no banco:', confirmations.map(c => c.contact_phone.replace(/\D/g, '')))
+    if (!confirmations || confirmations.length === 0) {
+      res.json({ ok: true })
+      return
     }
 
-    // Função para normalizar telefone para comparação
-    const normalizePhone = (p: string) => p.replace(/\D/g, '')
-    
-    // Buscar confirmação pelo phone normalizado (comparação flexível)
-    const confirmation = confirmations?.find(c => {
-      const bankPhone = normalizePhone(c.contact_phone)
-      // Verificar se algum contém o outro (para números que podem ter formato diferente)
+    // Buscar confirmação pelo phone
+    const confirmation = confirmations.find(c => {
+      const bankPhone = c.contact_phone.replace(/\D/g, '')
       return bankPhone.includes(phone) || phone.includes(bankPhone)
     })
 
     if (!confirmation) {
-      console.log('[WAHA] nenhuma confirmação encontrada para phone:', phone)
+      res.json({ ok: true })
+      return
+    }
+
+    // Verificar se já expirou
+    if (confirmation.expires_at && new Date(confirmation.expires_at) < new Date()) {
       res.json({ ok: true })
       return
     }
@@ -175,8 +172,6 @@ router.post('/', async (req: Request, res: Response) => {
     let novoStatus: string | null = null
     if (RESPOSTAS_SIM.includes(texto)) novoStatus = 'confirmed'
     if (RESPOSTAS_NAO.includes(texto)) novoStatus = 'cancelled'
-
-    console.log('[WAHA] texto reconheceu:', novoStatus || 'nenhum')
 
     if (novoStatus) {
       await supabase
@@ -189,37 +184,7 @@ router.post('/', async (req: Request, res: Response) => {
         })
         .eq('id', confirmation.id)
 
-      console.log(`[WAHA] ATUALIZADO ${novoStatus}: phone=${phone} | texto="${texto}"`)
-    }
-  }
-
-  if (event === 'message.ack') {
-    const waMessageId = payload.id
-    const ack = payload.ack as number
-
-    if (!waMessageId) {
-      res.json({ ok: true })
-      return
-    }
-
-    const { data: confirmation } = await supabase
-      .from('confirmations')
-      .select('id, user_id')
-      .eq('wa_message_id', waMessageId)
-      .maybeSingle()
-
-    if (confirmation) {
-      let newStatus: string = 'sent'
-      if (ack === 1) newStatus = 'sent'
-      else if (ack === 2) newStatus = 'delivered'
-      else if (ack >= 3) newStatus = 'read'
-
-      await supabase
-        .from('confirmations')
-        .update({ message_status: newStatus, updated_at: new Date().toISOString() })
-        .eq('id', confirmation.id)
-
-      console.log(`[WAHA Webhook] message.ack: waId=${waMessageId} ack=${ack} → ${newStatus}`)
+      console.log(`[WAHA] ✓ ${confirmation.contact_name}: ${novoStatus} ("${texto}")`)
     }
   }
 
