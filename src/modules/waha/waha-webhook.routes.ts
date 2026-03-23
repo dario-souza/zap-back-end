@@ -138,13 +138,12 @@ router.post('/', async (req: Request, res: Response) => {
       return
     }
 
-    // Buscar confirmações pendentes que ainda não expiraram
+    // Buscar confirmações pendentes
     const { data: confirmations } = await supabase
       .from('confirmations')
       .select('*')
       .eq('user_id', userId)
       .eq('status', 'pending')
-      .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
       .order('created_at', { ascending: false })
 
     if (!confirmations || confirmations.length === 0) {
@@ -159,12 +158,6 @@ router.post('/', async (req: Request, res: Response) => {
     })
 
     if (!confirmation) {
-      res.json({ ok: true })
-      return
-    }
-
-    // Verificar se já expirou
-    if (confirmation.expires_at && new Date(confirmation.expires_at) < new Date()) {
       res.json({ ok: true })
       return
     }

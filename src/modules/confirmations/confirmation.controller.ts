@@ -32,7 +32,7 @@ export const confirmationController = {
 
   create: asyncHandler(async (req: AuthRequest, res: Response) => {
     const userId = getUserId(req)
-    const { contactName, contactPhone, eventDate, sendAt, messageContent, contactId, expiresAt } = req.body
+    const { contactName, contactPhone, eventDate, sendAt, messageContent, contactId } = req.body
 
     if (!contactName || !contactPhone || !eventDate) {
       res.status(400).json({
@@ -49,7 +49,6 @@ export const confirmationController = {
       sendAt,
       messageContent,
       contactId,
-      expiresAt,
     )
     res.status(201).json(confirmation)
   }),
