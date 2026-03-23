@@ -18,7 +18,7 @@ export const env = {
   WAHA_API_URL: required('WAHA_API_URL'),
   WAHA_API_KEY: required('WAHA_API_KEY'),
   WAHA_URL: required('WAHA_API_URL'),
-  WAHA_WS_URL: required('WAHA_WS_URL'),
+  // WAHA_WS_URL: required('WAHA_WS_URL'),
   WAHA_SESSION_NAME: process.env.WAHA_SESSION_NAME ?? 'default',
   WAHA_WEBHOOK_URL: required('WAHA_WEBHOOK_URL'),
   JWT_SECRET: required('JWT_SECRET'),
