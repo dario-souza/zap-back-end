@@ -2,32 +2,32 @@ export function calculateNextSendAt(cronPattern: string): Date {
   const [minutesStr, hoursStr, dayOfMonthStr, , dayOfWeekStr] = cronPattern.split(' ')
   const now = new Date()
 
-  const utcHour = parseInt(hoursStr)
-  const utcMinute = parseInt(minutesStr)
+  const targetHour = parseInt(hoursStr)
+  const targetMinute = parseInt(minutesStr)
 
   const next = new Date(now)
-  next.setUTCHours(utcHour, utcMinute, 0, 0)
+  next.setHours(targetHour, targetMinute, 0, 0)
 
   if (dayOfMonthStr !== '*') {
     const targetDate = parseInt(dayOfMonthStr)
-    next.setUTCDate(targetDate)
+    next.setDate(targetDate)
   }
 
   if (dayOfWeekStr !== '*') {
     const targetDay = parseInt(dayOfWeekStr)
-    const currentDay = next.getUTCDay()
+    const currentDay = next.getDay()
     let daysToAdd = targetDay - currentDay
     if (daysToAdd < 0 || (daysToAdd === 0 && next.getTime() <= now.getTime())) {
       daysToAdd += 7
     }
-    next.setUTCDate(next.getUTCDate() + daysToAdd)
+    next.setDate(next.getDate() + daysToAdd)
   }
 
   if (next.getTime() <= now.getTime()) {
     if (dayOfMonthStr !== '*') {
-      next.setUTCMonth(next.getUTCMonth() + 1)
+      next.setMonth(next.getMonth() + 1)
     } else if (dayOfWeekStr !== '*') {
-      next.setUTCDate(next.getUTCDate() + 7)
+      next.setDate(next.getDate() + 7)
     }
   }
 

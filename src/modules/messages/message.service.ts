@@ -4,6 +4,7 @@ import { messageQueue } from '../../queue/queue'
 import { whatsappService } from '../../integrations/whatsapp/whatsapp.service'
 import { messageLogRepository } from './message-log.repository'
 import { buildCronExpression, parseCronExpression } from '../../shared/utils/cron.helper'
+import { calculateNextSendAt } from '../../shared/utils/calcNextRun'
 import type { Message, CreateMessageDto, UpdateMessageDto, MessageStatus } from './message.types'
 
 const getSessionName = (userId: string): string => {
@@ -90,8 +91,13 @@ export const messageService = {
     if (recurring) {
       const cron = buildCronFromInput(input)
       const schedulerId = `recurring_${message.id}`
+      const nextSendAt = calculateNextSendAt(cron)
 
-      await messageRepository.update(message.id, userId, { recurrence_cron: cron } as any)
+      await messageRepository.update(message.id, userId, { 
+        recurrence_cron: cron,
+        next_send_at: nextSendAt.toISOString(),
+        job_id: schedulerId,
+      } as any)
 
       await messageQueue.addRecurring(schedulerId, {
         type: 'recurring',
