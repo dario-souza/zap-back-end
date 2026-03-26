@@ -101,7 +101,8 @@ export const confirmationService = {
     if (result.success && result.id) {
       await confirmationRepository.updateMessageStatus(id, 'sent', result.id);
     } else {
-      throw new AppError(result.error || 'Falha ao enviar mensagem', 500);
+      await confirmationRepository.updateMessageStatus(id, 'failed')
+      throw new AppError(result.error || 'Falha ao enviar mensagem', 503);
     }
   },
 

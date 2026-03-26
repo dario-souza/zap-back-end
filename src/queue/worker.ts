@@ -130,6 +130,14 @@ async function handleConfirmationJob(job: Job<JobPayload>) {
   )
 
   console.log(`[Worker] Enviando confirmação para ${phone}`)
+  
+  const sessionStatus = await whatsappService.getSessionStatus(userId)
+  if (!sessionStatus.connected) {
+    const { confirmationRepository } = await import('../modules/confirmations/confirmation.repository.ts')
+    await confirmationRepository.updateMessageStatus(confirmationId, 'failed')
+    throw new Error(sessionStatus.error || 'WhatsApp não conectado')
+  }
+  
   const result = await whatsappService.send(sessionName, phone, finalContent)
 
   if (result.success && result.id) {
@@ -177,6 +185,21 @@ async function handleMessageJob(job: Job<JobPayload>) {
   }
 
   console.log(`[Worker] Enviando para ${phone}`)
+  
+  const sessionStatus = await whatsappService.getSessionStatus(userId)
+  if (!sessionStatus.connected) {
+    if (messageId) {
+      await messageRepository.updateStatus(messageId, userId, 'failed')
+      await messageLogRepository.create({
+        messageId,
+        userId,
+        event: 'failed',
+        metadata: { error: sessionStatus.error || 'WhatsApp não conectado' },
+      })
+    }
+    throw new Error(sessionStatus.error || 'WhatsApp não conectado')
+  }
+  
   const result = await whatsappService.send(sessionName, phone, finalContent)
 
   if (result.success && result.id) {

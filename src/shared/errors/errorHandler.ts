@@ -12,6 +12,6 @@ export const errorHandler = (err: Error, res: Response): void => {
   }
 
   res.status(500).json({
-    error: 'Erro interno do servidor',
+    error: err.message || 'Erro interno do servidor',
   })
 }

@@ -5,6 +5,7 @@ import { whatsappService } from '../../integrations/whatsapp/whatsapp.service'
 import { messageLogRepository } from './message-log.repository'
 import { buildCronExpression, parseCronExpression } from '../../shared/utils/cron.helper'
 import { calculateNextSendAt } from '../../shared/utils/calcNextRun'
+import { AppError } from '../../shared/errors/AppError'
 import type { Message, CreateMessageDto, UpdateMessageDto, MessageStatus } from './message.types'
 
 const getSessionName = (userId: string): string => {
@@ -89,6 +90,12 @@ export const messageService = {
     })
 
     if (recurring) {
+      const sessionStatus = await whatsappService.getSessionStatus(userId)
+      if (!sessionStatus.connected) {
+        await messageRepository.updateStatus(message.id, userId, 'failed')
+        throw new AppError(sessionStatus.error || 'WhatsApp não conectado. Conecte-se na página de conexão.', 503)
+      }
+
       const cron = buildCronFromInput(input)
       const schedulerId = `recurring_${message.id}`
       const nextSendAt = calculateNextSendAt(cron)
@@ -114,6 +121,12 @@ export const messageService = {
     }
 
     if (scheduled) {
+      const sessionStatus = await whatsappService.getSessionStatus(userId)
+      if (!sessionStatus.connected) {
+        await messageRepository.updateStatus(message.id, userId, 'failed')
+        throw new AppError(sessionStatus.error || 'WhatsApp não conectado. Conecte-se na página de conexão.', 503)
+      }
+
       const delay = new Date(input.scheduled_at!).getTime() - Date.now()
       const jobId = await messageQueue.add('send-message', {
         type: 'scheduled',
@@ -126,6 +139,12 @@ export const messageService = {
       }, { delay: Math.max(0, delay) })
       await messageRepository.updateJobId(message.id, userId, jobId || null)
       return message
+    }
+
+    const sessionStatus = await whatsappService.getSessionStatus(userId)
+    if (!sessionStatus.connected) {
+      await messageRepository.updateStatus(message.id, userId, 'failed')
+      throw new AppError(sessionStatus.error || 'WhatsApp não conectado. Conecte-se na página de conexão.', 503)
     }
 
     let finalContent = message.content
@@ -273,10 +292,16 @@ export const messageService = {
     const message = await messageRepository.findById(id, userId)
 
     if (!message) {
-      throw new Error('Mensagem não encontrada')
+      throw new AppError('Mensagem não encontrada', 404)
     }
 
     const sessionName = getSessionName(userId)
+    
+    const sessionStatus = await whatsappService.getSessionStatus(userId)
+    if (!sessionStatus.connected) {
+      await messageRepository.updateStatus(message.id, userId, 'failed')
+      throw new AppError(sessionStatus.error || 'WhatsApp não conectado. Conecte-se na página de conexão.', 503)
+    }
 
     let finalContent = message.content
     if (message.contact_id) {
@@ -318,6 +343,11 @@ export const messageService = {
     sendNow?: boolean,
     recurrenceType?: string
   ): Promise<{ success: number; failed: number; total: number }> {
+    const sessionStatus = await whatsappService.getSessionStatus(userId)
+    if (!sessionStatus.connected) {
+      throw new AppError(sessionStatus.error || 'WhatsApp não conectado. Conecte-se na página de conexão.', 503)
+    }
+
     let success = 0
     let failed = 0
     const sessionName = getSessionName(userId)
