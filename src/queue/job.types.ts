@@ -16,4 +16,7 @@ export type JobPayload = {
   confirmationId?: string
   contactName?: string
   eventDate?: string
+  schedulerId?: string
+  cronPatternUTC?: string
+  isFirstJob?: boolean
 }

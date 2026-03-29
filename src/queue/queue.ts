@@ -3,7 +3,6 @@ import { redisConnection } from '../config/redis.ts'
 import type { JobPayload } from './job.types.ts'
 
 const QUEUE_NAME = 'messages'
-const DEFAULT_TIMEZONE = 'America/Sao_Paulo'
 
 let queueInstance: Queue | null = null
 
@@ -62,19 +61,43 @@ export const messageQueue = {
   async addRecurring(
     schedulerId: string,
     data: JobPayload,
-    cronPattern: string,
-    timezone: string = DEFAULT_TIMEZONE,
+    cronPatternUTC: string,
+    nextSendAt?: Date,
   ): Promise<string | undefined> {
     const queue = getQueue()
+    const now = Date.now()
 
-    console.log(`[Queue] Criando job recorrente: ${schedulerId}, cron: ${cronPattern}, timezone: ${timezone}`)
+    console.log(`[Queue] Criando job recorrente: ${schedulerId}, cron (UTC): ${cronPatternUTC}`)
+
+    if (nextSendAt) {
+      const nextTime = nextSendAt.getTime()
+      const delay = nextTime - now
+
+      console.log(`[Queue] Próximo envio: ${nextSendAt.toISOString()}, delay: ${delay}ms`)
+
+      if (delay > 0) {
+        console.log(`[Queue] Criando job único para primeiro envio (não cria scheduler agora)`)
+        
+        await queue.add('send-message', {
+          ...data,
+          schedulerId,
+          cronPatternUTC,
+        }, {
+          delay: Math.max(0, delay),
+        })
+        
+        console.log(`[Queue] Job criado com delay ${delay}ms - worker vai criar scheduler após processar`)
+        return schedulerId
+      }
+    }
+
+    const repeatOptions = {
+      pattern: cronPatternUTC,
+    }
 
     await queue.upsertJobScheduler(
       schedulerId,
-      { 
-        pattern: cronPattern,
-        tz: timezone,
-      },
+      repeatOptions,
       {
         name: 'send-message',
         data,
@@ -84,8 +107,30 @@ export const messageQueue = {
         },
       },
     )
-
+    
+    console.log(`[Queue] Job scheduler criado com sucesso!`)
     return schedulerId
+  },
+
+  async createScheduler(schedulerId: string, data: JobPayload, cronPatternUTC: string): Promise<void> {
+    const queue = getQueue()
+    
+    console.log(`[Queue] Criando scheduler: ${schedulerId}, cron: ${cronPatternUTC}`)
+    
+    await queue.upsertJobScheduler(
+      schedulerId,
+      { pattern: cronPatternUTC },
+      {
+        name: 'send-message',
+        data,
+        opts: {
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 1000 },
+        },
+      },
+    )
+    
+    console.log(`[Queue] Scheduler criado com sucesso!`)
   },
 
   async getJob(jobId: string) {

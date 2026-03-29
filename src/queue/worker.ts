@@ -7,6 +7,7 @@ import { messageLogRepository } from '../modules/messages/message-log.repository
 import { calculateNextSendAt } from '../shared/utils/calcNextRun.ts'
 import { AppError } from '../shared/errors/AppError.ts'
 import type { JobPayload } from './job.types.ts'
+import { messageQueue } from './queue.ts'
 
 const WHATSAPP_MIN_DELAY = 2000
 const WHATSAPP_MAX_DELAY = 5000
@@ -168,7 +169,11 @@ async function handleMessageJob(job: Job<JobPayload>) {
     sessionName,
     contactId,
     recurrenceCron,
+    schedulerId,
+    cronPatternUTC,
   } = job.data
+
+  const isFirstJob = !!schedulerId && !!cronPatternUTC
 
   const humanDelay = getRandomDelay(WHATSAPP_MIN_DELAY, WHATSAPP_MAX_DELAY)
   console.log(
@@ -230,6 +235,21 @@ async function handleMessageJob(job: Job<JobPayload>) {
             userId,
             nextSendAt.toISOString(),
           )
+        }
+
+        if (isFirstJob && schedulerId && cronPatternUTC) {
+          console.log(`[Worker] Primeiro job enviado, criando scheduler para próximas execuções`)
+          await messageQueue.createScheduler(schedulerId, {
+            type: 'recurring',
+            messageId,
+            userId,
+            sessionName,
+            phone,
+            content,
+            contactId,
+            recurrenceCron,
+          }, cronPatternUTC)
+          console.log(`[Worker] Scheduler criado: ${schedulerId}`)
         }
       }
     }
