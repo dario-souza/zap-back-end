@@ -4,9 +4,11 @@ import { messageQueue } from '../../queue/queue'
 import { whatsappService } from '../../integrations/whatsapp/whatsapp.service'
 import { messageLogRepository } from './message-log.repository'
 import { buildCronExpression, parseCronExpression } from '../../shared/utils/cron.helper'
-import { calculateNextSendAt } from '../../shared/utils/calcNextRun'
+import { calculateNextSendAt, buildCronExpressionWithTimezone } from '../../shared/utils/calcNextRun'
 import { AppError } from '../../shared/errors/AppError'
 import type { Message, CreateMessageDto, UpdateMessageDto, MessageStatus } from './message.types'
+
+const DEFAULT_TIMEZONE = 'America/Sao_Paulo'
 
 const getSessionName = (userId: string): string => {
   return whatsappService.getSessionName(userId)
@@ -45,21 +47,21 @@ const buildCronFromInput = (input: CreateMessageDto): string => {
   if (input.recurrence_cron) return input.recurrence_cron
 
   if (input.recurrence_type === 'WEEKLY' && input.recurrence_day_of_week !== undefined) {
-    return buildCronExpression({
+    return buildCronExpressionWithTimezone({
       frequency: 'weekly',
       dayOfWeek: input.recurrence_day_of_week,
       hour: input.recurrence_hour ?? 9,
       minute: input.recurrence_minute ?? 0,
-    })
+    }, DEFAULT_TIMEZONE)
   }
 
   if (input.recurrence_type === 'MONTHLY' && input.recurrence_day_of_month !== undefined) {
-    return buildCronExpression({
+    return buildCronExpressionWithTimezone({
       frequency: 'monthly',
       dayOfMonth: input.recurrence_day_of_month,
       hour: input.recurrence_hour ?? 9,
       minute: input.recurrence_minute ?? 0,
-    })
+    }, DEFAULT_TIMEZONE)
   }
 
   return ''
@@ -115,7 +117,7 @@ export const messageService = {
         content: message.content,
         contactId: message.contact_id,
         recurrenceCron: cron,
-      }, cron)
+      }, cron, DEFAULT_TIMEZONE)
 
       return message
     }
@@ -374,6 +376,13 @@ export const messageService = {
 
         if (isRecurringBulk) {
           const schedulerId = `recurring_${message.id}`
+          const cron = buildCronFromInput({
+            recurrence_type: recurrenceType || 'NONE',
+            recurrence_day_of_week: undefined,
+            recurrence_day_of_month: undefined,
+            recurrence_hour: 9,
+            recurrence_minute: 0,
+          } as CreateMessageDto)
           await messageQueue.addRecurring(schedulerId, {
             type: 'recurring',
             messageId: message.id,
@@ -382,7 +391,7 @@ export const messageService = {
             phone: contact.phone,
             content,
             contactId: contactId,
-          }, '')
+          }, cron || '0 9 * * *', DEFAULT_TIMEZONE)
           await messageRepository.updateJobId(message.id, userId, schedulerId)
         } else if (isScheduled) {
           const delay = new Date(scheduledAt).getTime() - Date.now()

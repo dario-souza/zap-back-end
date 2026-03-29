@@ -5,6 +5,7 @@ import { messageRepository } from '../modules/messages/message.repository.ts'
 import { contactRepository } from '../modules/contacts/contact.repository.ts'
 import { messageLogRepository } from '../modules/messages/message-log.repository.ts'
 import { calculateNextSendAt } from '../shared/utils/calcNextRun.ts'
+import { AppError } from '../shared/errors/AppError.ts'
 import type { JobPayload } from './job.types.ts'
 
 const WHATSAPP_MIN_DELAY = 2000
@@ -135,7 +136,7 @@ async function handleConfirmationJob(job: Job<JobPayload>) {
   if (!sessionStatus.connected) {
     const { confirmationRepository } = await import('../modules/confirmations/confirmation.repository.ts')
     await confirmationRepository.updateMessageStatus(confirmationId, 'failed')
-    throw new Error(sessionStatus.error || 'WhatsApp não conectado')
+    throw new AppError(sessionStatus.error || 'WhatsApp não conectado', 503)
   }
   
   const result = await whatsappService.send(sessionName, phone, finalContent)
@@ -154,7 +155,7 @@ async function handleConfirmationJob(job: Job<JobPayload>) {
     const { confirmationRepository } =
       await import('../modules/confirmations/confirmation.repository.ts')
     await confirmationRepository.updateMessageStatus(confirmationId, 'failed')
-    throw new Error(result.error || 'Falha ao enviar confirmação')
+    throw new AppError(result.error || 'Falha ao enviar confirmação', 500)
   }
 }
 
@@ -197,7 +198,7 @@ async function handleMessageJob(job: Job<JobPayload>) {
         metadata: { error: sessionStatus.error || 'WhatsApp não conectado' },
       })
     }
-    throw new Error(sessionStatus.error || 'WhatsApp não conectado')
+    throw new AppError(sessionStatus.error || 'WhatsApp não conectado', 503)
   }
   
   const result = await whatsappService.send(sessionName, phone, finalContent)
@@ -245,7 +246,7 @@ async function handleMessageJob(job: Job<JobPayload>) {
         metadata: { error: result.error },
       })
     }
-    throw new Error(result.error || 'Falha ao enviar')
+    throw new AppError(result.error || 'Falha ao enviar', 500)
   }
 }
 

@@ -1,11 +1,12 @@
 import { Response } from 'express'
 import { userService } from './user.service.ts'
 import { asyncHandler } from '../../shared/utils/asyncHandler.ts'
+import { AppError } from '../../shared/errors/AppError.ts'
 import type { AuthRequest } from '../auth/auth.types.ts'
 
 const getUserId = (req: AuthRequest): string => {
   if (!req.user?.id) {
-    throw new Error('Usuário não autenticado')
+    throw new AppError('Usuário não autenticado', 401)
   }
   return req.user.id
 }
@@ -16,8 +17,7 @@ export const userController = {
     const profile = await userService.getProfile(userId)
 
     if (!profile) {
-      res.status(404).json({ error: 'Perfil não encontrado' })
-      return
+      throw new AppError('Perfil não encontrado', 404)
     }
 
     res.json(profile)

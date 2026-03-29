@@ -3,6 +3,7 @@ import { redisConnection } from '../config/redis.ts'
 import type { JobPayload } from './job.types.ts'
 
 const QUEUE_NAME = 'messages'
+const DEFAULT_TIMEZONE = 'America/Sao_Paulo'
 
 let queueInstance: Queue | null = null
 
@@ -62,12 +63,18 @@ export const messageQueue = {
     schedulerId: string,
     data: JobPayload,
     cronPattern: string,
+    timezone: string = DEFAULT_TIMEZONE,
   ): Promise<string | undefined> {
     const queue = getQueue()
 
+    console.log(`[Queue] Criando job recorrente: ${schedulerId}, cron: ${cronPattern}, timezone: ${timezone}`)
+
     await queue.upsertJobScheduler(
       schedulerId,
-      { pattern: cronPattern },
+      { 
+        pattern: cronPattern,
+        tz: timezone,
+      },
       {
         name: 'send-message',
         data,

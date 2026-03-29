@@ -1,12 +1,13 @@
 import { Response } from 'express'
 import { messageService } from './message.service'
 import { asyncHandler } from '../../shared/utils/asyncHandler'
+import { AppError } from '../../shared/errors/AppError'
 import type { AuthRequest } from '../auth/auth.types'
 import type { CreateMessageDto, UpdateMessageDto } from './message.types'
 
 const getUserId = (req: AuthRequest): string => {
   if (!req.user?.id) {
-    throw new Error('Usuário não autenticado')
+    throw new AppError('Usuário não autenticado', 401)
   }
   return req.user.id
 }
