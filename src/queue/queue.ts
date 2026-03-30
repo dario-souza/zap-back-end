@@ -61,13 +61,13 @@ export const messageQueue = {
   async addRecurring(
     schedulerId: string,
     data: JobPayload,
-    cronPatternUTC: string,
+    cronPattern: string,
     nextSendAt?: Date,
   ): Promise<string | undefined> {
     const queue = getQueue()
     const now = Date.now()
 
-    console.log(`[Queue] Criando job recorrente: ${schedulerId}, cron (UTC): ${cronPatternUTC}`)
+    console.log(`[Queue] Criando job recorrente: ${schedulerId}, cron: ${cronPattern}`)
 
     if (nextSendAt) {
       const nextTime = nextSendAt.getTime()
@@ -81,7 +81,7 @@ export const messageQueue = {
         await queue.add('send-message', {
           ...data,
           schedulerId,
-          cronPatternUTC,
+          cronPatternUTC: cronPattern,
         }, {
           delay: Math.max(0, delay),
         })
@@ -92,7 +92,7 @@ export const messageQueue = {
     }
 
     const repeatOptions = {
-      pattern: cronPatternUTC,
+      pattern: cronPattern,
     }
 
     await queue.upsertJobScheduler(
@@ -112,14 +112,14 @@ export const messageQueue = {
     return schedulerId
   },
 
-  async createScheduler(schedulerId: string, data: JobPayload, cronPatternUTC: string): Promise<void> {
+  async createScheduler(schedulerId: string, data: JobPayload, cronPattern: string): Promise<void> {
     const queue = getQueue()
     
-    console.log(`[Queue] Criando scheduler: ${schedulerId}, cron: ${cronPatternUTC}`)
+    console.log(`[Queue] Criando scheduler: ${schedulerId}, cron: ${cronPattern}`)
     
     await queue.upsertJobScheduler(
       schedulerId,
-      { pattern: cronPatternUTC },
+      { pattern: cronPattern },
       {
         name: 'send-message',
         data,

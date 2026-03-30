@@ -5,7 +5,7 @@ import { whatsappService } from '../../integrations/whatsapp/whatsapp.service'
 import { messageLogRepository } from './message-log.repository'
 import { buildCronExpression, parseCronExpression } from '../../shared/utils/cron.helper'
 import { calculateNextSendAt, buildCronExpressionWithTimezone } from '../../shared/utils/calcNextRun'
-import { convertCronToUTC, getNextExecutionTimeUTC } from '../../shared/utils/cronTimezone'
+import { getNextExecutionTimeUTC } from '../../shared/utils/cronTimezone'
 import { AppError } from '../../shared/errors/AppError'
 import type { Message, CreateMessageDto, UpdateMessageDto, MessageStatus } from './message.types'
 
@@ -100,12 +100,10 @@ export const messageService = {
       }
 
       const cron = buildCronFromInput(input)
-      const cronUTC = convertCronToUTC(cron, DEFAULT_TIMEZONE)
       const schedulerId = `recurring_${message.id}`
       const nextSendAt = getNextExecutionTimeUTC(cron, DEFAULT_TIMEZONE)
 
-      console.log(`[MessageService] Cron original (${DEFAULT_TIMEZONE}): ${cron}`)
-      console.log(`[MessageService] Cron convertido (UTC): ${cronUTC}`)
+      console.log(`[MessageService] Cron (${DEFAULT_TIMEZONE}): ${cron}`)
       console.log(`[MessageService] Próximo envio: ${nextSendAt.toISOString()}`)
 
       await messageRepository.update(message.id, userId, { 
@@ -123,7 +121,7 @@ export const messageService = {
         content: message.content,
         contactId: message.contact_id,
         recurrenceCron: cron,
-      }, cronUTC, nextSendAt)
+      }, cron, nextSendAt)
 
       return message
     }
@@ -389,7 +387,6 @@ export const messageService = {
             recurrence_hour: 9,
             recurrence_minute: 0,
           } as CreateMessageDto)
-          const cronUTC = convertCronToUTC(cron || '0 9 * * *', DEFAULT_TIMEZONE)
           const nextSendAt = getNextExecutionTimeUTC(cron, DEFAULT_TIMEZONE)
           await messageQueue.addRecurring(schedulerId, {
             type: 'recurring',
@@ -399,7 +396,7 @@ export const messageService = {
             phone: contact.phone,
             content,
             contactId: contactId,
-          }, cronUTC, nextSendAt)
+          }, cron, nextSendAt)
           await messageRepository.updateJobId(message.id, userId, schedulerId)
         } else if (isScheduled) {
           const delay = new Date(scheduledAt).getTime() - Date.now()
