@@ -96,13 +96,19 @@ export const confirmationService = {
         : '',
     );
 
-    const result = await whatsappService.send(sessionName, confirmation.contact_phone.replace(/\D/g, ''), finalContent);
+    const result = await whatsappService.sendPoll(
+      sessionName, 
+      confirmation.contact_phone.replace(/\D/g, ''), 
+      finalContent || 'Confirme sua presença',
+      ['Sim', 'Não'],
+      false
+    );
 
     if (result.success && result.id) {
       await confirmationRepository.updateMessageStatus(id, 'sent', result.id);
     } else {
       await confirmationRepository.updateMessageStatus(id, 'failed')
-      throw new AppError(result.error || 'Falha ao enviar mensagem', 503);
+      throw new AppError(result.error || 'Falha ao enviar poll', 503);
     }
   },
 

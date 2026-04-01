@@ -131,7 +131,7 @@ async function handleConfirmationJob(job: Job<JobPayload>) {
       : '',
   )
 
-  console.log(`[Worker] Enviando confirmação para ${phone}`)
+  console.log(`[Worker] Enviando poll de confirmação para ${phone}`)
   
   const sessionStatus = await whatsappService.getSessionStatus(userId)
   if (!sessionStatus.connected) {
@@ -140,7 +140,11 @@ async function handleConfirmationJob(job: Job<JobPayload>) {
     throw new AppError(sessionStatus.error || 'WhatsApp não conectado', 503)
   }
   
-  const result = await whatsappService.send(sessionName, phone, finalContent)
+  // Poll: "Confirme sua presença" com opções Sim/Não
+  const pollName = finalContent ? `${finalContent}` : 'Confirme sua presença'
+  const pollOptions = ['Sim', 'Não']
+  
+  const result = await whatsappService.sendPoll(sessionName, phone, pollName, pollOptions, false)
 
   if (result.success && result.id) {
     const { confirmationRepository } =
@@ -150,13 +154,13 @@ async function handleConfirmationJob(job: Job<JobPayload>) {
       'sent',
       result.id,
     )
-    console.log(`[Worker] Confirmação enviada! WAHA ID: ${result.id}`)
+    console.log(`[Worker] Poll enviado! WAHA ID: ${result.id}`)
     return { success: true, waMessageId: result.id }
   } else {
     const { confirmationRepository } =
       await import('../modules/confirmations/confirmation.repository.ts')
     await confirmationRepository.updateMessageStatus(confirmationId, 'failed')
-    throw new AppError(result.error || 'Falha ao enviar confirmação', 500)
+    throw new AppError(result.error || 'Falha ao enviar poll', 500)
   }
 }
 

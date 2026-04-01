@@ -135,6 +135,65 @@ export const whatsappService = {
     }
   },
 
+  async sendPoll(sessionName: string, phone: string, pollName: string, options: string[], multipleAnswers: boolean = false): Promise<{ success: boolean; id?: string; error?: string }> {
+    try {
+      const chatId = formatPhoneToChatId(phone)
+
+      const statusCheck = await fetch(`${WAHA_URL}/api/sessions/${sessionName}`, {
+        method: 'GET',
+        headers: getHeaders(),
+      })
+
+      if (!statusCheck.ok) {
+        const error = await statusCheck.text()
+        console.error('[WAHA] Erro ao verificar sessão:', error)
+        return { success: false, error: 'Sessão não encontrada. Crie uma sessão primeiro escaneando o QR code.' }
+      }
+
+      const statusData = await statusCheck.json() as { status?: string }
+      
+      if (statusData.status !== 'WORKING') {
+        const statusMessage = {
+          'STOPPED': 'Sessão está parada. Inicie a sessão.',
+          'STARTING': 'Sessão está iniciando. Aguarde...',
+          'SCAN_QR_CODE': 'Sessão precisa de QR code. Escaneie o código.',
+          'FAILED': 'Sessão falhou. Recrie a sessão escaneando um novo QR code.',
+        }
+        return { 
+          success: false, 
+          error: statusMessage[statusData.status as keyof typeof statusMessage] || `Sessão está com status: ${statusData.status}` 
+        }
+      }
+      
+      const response = await fetch(`${WAHA_URL}/api/sendPoll`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({
+          session: sessionName,
+          chatId: chatId,
+          poll: {
+            name: pollName,
+            options: options,
+            multipleAnswers: multipleAnswers,
+          },
+        }),
+      })
+
+      if (!response.ok) {
+        const error = await response.text()
+        console.error('[WAHA] Erro ao enviar poll:', error)
+        return { success: false, error }
+      }
+
+      const data = await response.json() as { id?: string }
+      console.log('[WAHA] Poll enviado:', data)
+      return { success: true, id: data.id }
+    } catch (error) {
+      console.error('[WAHA] Erro na requisição de poll:', error)
+      return { success: false, error: String(error) }
+    }
+  },
+
   async getSessionStatus(userId: string): Promise<{ connected: boolean; status?: string; error?: string; phone?: string; pushName?: string }> {
     const session = await getUserSession(userId)
     if (!session) {
@@ -210,7 +269,7 @@ export const whatsappService = {
             startBody.config = {
               webhooks: [{
                 url: webhookUrl,
-                events: ['session.status', 'message'],
+                events: ['session.status', 'poll.vote'],
                 retries: {
                   policy: 'constant',
                   delaySeconds: 2,
@@ -249,7 +308,7 @@ export const whatsappService = {
 
         const webhookConfig = [{
           url: webhookUrl,
-          events: ['session.status', 'message'],
+          events: ['session.status', 'poll.vote'],
           retries: {
             policy: 'constant',
             delaySeconds: 2,
@@ -450,7 +509,7 @@ export const whatsappService = {
             config: {
               webhooks: [{
                 url: webhookUrl,
-                events: ['session.status', 'message'],
+                events: ['session.status', 'poll.vote'],
                 retries: {
                   policy: 'exponential',
                   delaySeconds: 2,

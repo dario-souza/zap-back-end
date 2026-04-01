@@ -103,40 +103,49 @@ router.post('/', async (req: Request, res: Response) => {
     }
   }
 
-  // Evento 'message' - só recebe mensagens de outros (não as que você envia)
-  // Este evento substitui 'message.any' para economizarwebhook calls
-  if (event === 'message') {
+  // Evento 'poll.vote' - usuário votou em uma opção do poll
+  if (event === 'poll.vote') {
     const userId = extractUserIdFromSession(sessionName)
-
     if (!userId) {
       res.json({ ok: true })
       return
     }
 
-    const texto = payload.body?.toLowerCase().trim() || ''
-    let phone = ''
+    const vote = payload.vote
+    const poll = payload.poll
 
-    // Phone que veio do WAHA
-    if (payload.from?.includes('@lid')) {
-      // Formato LID - preciso resolver para obter o número
+    // Verificar se é um poll nosso (fromMe = true)
+    if (!poll?.fromMe) {
+      console.log('[WAHA] Poll não enviado por nós, ignorando')
+      res.json({ ok: true })
+      return
+    }
+
+    const selectedOptions = vote?.selectedOptions || []
+    
+    // Extrair phone - verificar se é formato LID (precisa resolver via API) ou formato normal
+    let phone = ''
+    if (vote?.from?.includes('@lid')) {
       try {
-        const contactInfo = await resolveLidToPhone(sessionName, payload.from)
+        const contactInfo = await resolveLidToPhone(sessionName, vote.from)
         if (contactInfo?.phone) {
           phone = contactInfo.phone.replace(/\D/g, '')
         }
       } catch (err) {
-        console.error('[WAHA] Erro ao resolver lid:', err)
+        console.error('[WAHA] Erro ao resolver lid do voto:', err)
       }
     } else {
       // Formato normal - extrair número do @c.us
-      phone = payload.from?.replace('@c.us', '').replace('@lid', '').replace(/\D/g, '') || ''
+      phone = vote?.from?.replace('@c.us', '').replace('@lid', '').replace(/\D/g, '') || ''
     }
 
-    if (!phone) {
-      console.log('[WAHA] Não foi possível extrair phone da mensagem')
+    if (!phone || selectedOptions.length === 0) {
+      console.log('[WAHA] Poll sem phone ou opções selecionadas')
       res.json({ ok: true })
       return
     }
+
+    console.log(`[WAHA] Voto recebido de ${phone}:`, selectedOptions)
 
     // Buscar confirmações pendentes
     const { data: confirmations } = await supabase
@@ -153,8 +162,8 @@ router.post('/', async (req: Request, res: Response) => {
 
     // Buscar confirmação pelo phone
     const confirmation = confirmations.find(c => {
-      const bankPhone = c.contact_phone.replace(/\D/g, '')
-      return bankPhone.includes(phone) || phone.includes(bankPhone)
+      const confirmPhone = c.contact_phone.replace(/\D/g, '')
+      return confirmPhone.includes(phone) || phone.includes(confirmPhone)
     })
 
     if (!confirmation) {
@@ -162,23 +171,107 @@ router.post('/', async (req: Request, res: Response) => {
       return
     }
 
+    // Mapear opção selecionada para status
     let novoStatus: string | null = null
-    if (RESPOSTAS_SIM.includes(texto)) novoStatus = 'confirmed'
-    if (RESPOSTAS_NAO.includes(texto)) novoStatus = 'cancelled'
+    const option = selectedOptions[0]?.toLowerCase()
+
+    if (option === 'sim') {
+      novoStatus = 'confirmed'
+    } else if (option === 'não' || option === 'nao') {
+      novoStatus = 'cancelled'
+    }
 
     if (novoStatus) {
       await supabase
         .from('confirmations')
         .update({
           status: novoStatus,
-          response: payload.body,
+          response: selectedOptions.join(', '),
           responded_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         })
         .eq('id', confirmation.id)
 
-      console.log(`[WAHA] ✓ ${confirmation.contact_name}: ${novoStatus} ("${texto}")`)
+      console.log(`[WAHA] ✓ ${confirmation.contact_name}: ${novoStatus} (voto: ${selectedOptions[0]})`)
     }
+  }
+
+  // Evento 'poll.vote.failed' - falha ao descriptografar o voto
+  if (event === 'poll.vote.failed') {
+    const userId = extractUserIdFromSession(sessionName)
+    if (!userId) {
+      res.json({ ok: true })
+      return
+    }
+
+    const vote = payload.vote
+    const poll = payload.poll
+
+    // Verificar se é um poll nosso
+    if (!poll?.fromMe) {
+      res.json({ ok: true })
+      return
+    }
+
+    // Extrair phone - verificar se é formato LID (precisa resolver via API) ou formato normal
+    let phone = ''
+    if (vote?.from?.includes('@lid')) {
+      try {
+        const contactInfo = await resolveLidToPhone(sessionName, vote.from)
+        if (contactInfo?.phone) {
+          phone = contactInfo.phone.replace(/\D/g, '')
+        }
+      } catch (err) {
+        console.error('[WAHA] Erro ao resolver lid do voto falho:', err)
+      }
+    } else {
+      // Formato normal - extrair número do @c.us
+      phone = vote?.from?.replace('@c.us', '').replace('@lid', '').replace(/\D/g, '') || ''
+    }
+
+    if (!phone) {
+      res.json({ ok: true })
+      return
+    }
+
+    console.log(`[WAHA] Falha ao descriptografar voto de ${phone}`)
+
+    // Buscar confirmações pendentes
+    const { data: confirmations } = await supabase
+      .from('confirmations')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false })
+
+    if (!confirmations || confirmations.length === 0) {
+      res.json({ ok: true })
+      return
+    }
+
+    // Buscar confirmação pelo phone
+    const confirmation = confirmations.find(c => {
+      const confirmPhone = c.contact_phone.replace(/\D/g, '')
+      return confirmPhone.includes(phone) || phone.includes(confirmPhone)
+    })
+
+    if (!confirmation) {
+      res.json({ ok: true })
+      return
+    }
+
+    // Atualizar status para failed - usuário precisará votar novamente manualmente
+    await supabase
+      .from('confirmations')
+      .update({
+        status: 'pending', // mantém pending mas poderíamos marcar como special status
+        response: 'FALHA_DESCRIPTOGRAFIA',
+        responded_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', confirmation.id)
+
+    console.log(`[WAHA] ⚠ ${confirmation.contact_name}: falha na descriptografia do voto`)
   }
 
   res.json({ ok: true });
