@@ -47,6 +47,8 @@ export const confirmationRepository = {
         event_date: input.event_date,
         send_at: input.send_at ?? null,
         message_content: input.message_content ?? null,
+        confirmation_response_message: input.confirmation_response_message ?? null,
+        cancellation_response_message: input.cancellation_response_message ?? null,
         status: input.status || 'pending',
         message_status: 'pending',
       })

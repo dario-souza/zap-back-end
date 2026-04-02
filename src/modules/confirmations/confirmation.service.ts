@@ -22,6 +22,8 @@ export const confirmationService = {
     sendAt: string | undefined,
     messageContent: string | undefined,
     contactId?: string,
+    confirmationResponseMessage?: string,
+    cancellationResponseMessage?: string,
   ): Promise<Confirmation> {
     const confirmation = await confirmationRepository.create(userId, {
       contact_id: contactId,
@@ -30,6 +32,8 @@ export const confirmationService = {
       event_date: eventDate,
       send_at: sendAt,
       message_content: messageContent,
+      confirmation_response_message: confirmationResponseMessage,
+      cancellation_response_message: cancellationResponseMessage,
       status: 'pending',
     });
 

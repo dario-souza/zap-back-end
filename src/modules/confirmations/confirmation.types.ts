@@ -10,6 +10,8 @@ export interface Confirmation {
   event_date: string;
   send_at?: string;
   message_content?: string;
+  confirmation_response_message?: string;
+  cancellation_response_message?: string;
   status: ConfirmationStatus;
   message_status: ConfirmationMessageStatus;
   response?: string;
@@ -27,6 +29,8 @@ export interface CreateConfirmationDto {
   event_date: string;
   send_at?: string;
   message_content?: string;
+  confirmation_response_message?: string;
+  cancellation_response_message?: string;
   status?: ConfirmationStatus;
 }
 

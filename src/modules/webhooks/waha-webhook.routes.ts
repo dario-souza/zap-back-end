@@ -52,6 +52,45 @@ async function resolveLidToPhone(sessionName: string, lid: string): Promise<{ ph
   }
 }
 
+async function sendAutomaticResponse(
+  sessionName: string,
+  phone: string,
+  confirmation: any,
+  status: string
+): Promise<void> {
+  const responseMessage = status === 'confirmed' 
+    ? confirmation.confirmation_response_message 
+    : confirmation.cancellation_response_message
+
+  if (!responseMessage) {
+    console.log('[WAHA] Nenhuma mensagem de resposta automática configurada')
+    return
+  }
+
+  // Substituir variáveis na mensagem
+  let finalMessage = responseMessage
+  finalMessage = finalMessage.replace(/\{\{contact_name\}\}/gi, confirmation.contact_name || '')
+  finalMessage = finalMessage.replace(/\{\{nome\}\}/gi, confirmation.contact_name || '')
+  finalMessage = finalMessage.replace(
+    /\{\{event_date\}\}/gi,
+    confirmation.event_date
+      ? new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(confirmation.event_date))
+      : ''
+  )
+
+  // Enviar mensagem com delay humano
+  const humanDelay = Math.floor(Math.random() * 2000) + 1000
+  await new Promise(resolve => setTimeout(resolve, humanDelay))
+
+  const result = await whatsappService.send(sessionName, phone, finalMessage)
+  
+  if (result.success) {
+    console.log(`[WAHA] ✓ Mensagem de resposta automática enviada para ${phone}`)
+  } else {
+    console.error(`[WAHA] Erro ao enviar mensagem de resposta: ${result.error}`)
+  }
+}
+
 router.post('/', async (req: Request, res: Response) => {
   const { event, session: sessionName, payload } = req.body;
 
@@ -193,6 +232,9 @@ router.post('/', async (req: Request, res: Response) => {
         .eq('id', confirmation.id)
 
       console.log(`[WAHA] ✓ ${confirmation.contact_name}: ${novoStatus} (voto: ${selectedOptions[0]})`)
+
+      // Enviar mensagem de resposta automática
+      await sendAutomaticResponse(sessionName, phone, confirmation, novoStatus)
     }
   }
 
