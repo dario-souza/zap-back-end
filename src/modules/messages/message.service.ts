@@ -192,10 +192,27 @@ export const messageService = {
   async delete(id: string, userId: string): Promise<void> {
     const message = await messageRepository.findById(id, userId)
 
+    console.log(`[MessageService] Deletando mensagem ${id}, job_id: ${message?.job_id}`)
+
     if (message?.job_id) {
       if (message.job_id.startsWith('recurring_')) {
+        // Remove o scheduler de jobs recorrentes
+        console.log(`[MessageService] Removendo scheduler: ${message.job_id}`)
         await messageQueue.removeRecurring(message.job_id)
+        
+        // Remove o job inicial (o primeiro envio que está com delay)
+        const delayedJobs = await messageQueue.getDelayedJobs()
+        
+        for (const job of delayedJobs) {
+          if (job.data && job.data.schedulerId === message.job_id) {
+            console.log(`[MessageService] Removendo job delayed: ${job.id}`)
+            await job.remove()
+          }
+        }
+        
+        console.log(`[MessageService] Verificação completa, jobs delayed restantes: ${(await messageQueue.getDelayedJobs()).length}`)
       } else {
+        // Para jobs únicos (agendados)
         const job = await messageQueue.getJob(message.job_id)
         if (job) {
           await job.remove()
@@ -211,6 +228,17 @@ export const messageService = {
     const recurringMessages = messages.filter(
       (m) => m.recurrence_type && m.recurrence_type !== 'NONE'
     )
+
+    // Remove todos os jobs com delay do Redis
+    const delayedJobs = await messageQueue.getDelayedJobs()
+    const schedulerIds = recurringMessages.map(m => m.job_id).filter(Boolean) as string[]
+
+    for (const job of delayedJobs) {
+      if (job.data && schedulerIds.includes(job.data.schedulerId)) {
+        console.log(`[MessageService] Removendo job delayed: ${job.id}`)
+        await job.remove()
+      }
+    }
 
     for (const message of recurringMessages) {
       if (message.job_id) {
@@ -255,6 +283,17 @@ export const messageService = {
         m.recurrence_type === 'NONE' &&
         m.scheduled_at !== null
     )
+
+    // Remove todos os jobs com delay do Redis
+    const delayedJobs = await messageQueue.getDelayedJobs()
+    const scheduledJobIds = scheduledMessages.map(m => m.job_id).filter(Boolean) as string[]
+
+    for (const job of delayedJobs) {
+      if (job.id && scheduledJobIds.includes(String(job.id))) {
+        console.log(`[MessageService] Removendo job delayed: ${job.id}`)
+        await job.remove()
+      }
+    }
 
     for (const message of scheduledMessages) {
       if (message.job_id) {

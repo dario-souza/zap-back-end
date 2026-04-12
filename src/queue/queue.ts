@@ -1,4 +1,4 @@
-import { Queue } from 'bullmq'
+import { Queue, Job } from 'bullmq'
 import { redisConnection } from '../config/redis.ts'
 import type { JobPayload } from './job.types.ts'
 
@@ -136,6 +136,31 @@ export const messageQueue = {
   async getJob(jobId: string) {
     const queue = getQueue()
     return queue.getJob(jobId)
+  },
+
+  async getDelayedJobs(): Promise<Job[]> {
+    const queue = getQueue()
+    return queue.getDelayed()
+  },
+
+  async getJobs(start = 0, end = 100): Promise<Job[]> {
+    const queue = getQueue()
+    return queue.getJobs([], start, end)
+  },
+
+  async getJobsByState(states: string[]): Promise<Job[]> {
+    const queue = getQueue()
+    return queue.getJobs(states as any, 0, 100)
+  },
+
+  async removeJobById(jobId: string): Promise<boolean> {
+    const queue = getQueue()
+    const job = await queue.getJob(jobId)
+    if (job) {
+      await job.remove()
+      return true
+    }
+    return false
   },
 
   async removeJobScheduler(schedulerId: string): Promise<void> {
