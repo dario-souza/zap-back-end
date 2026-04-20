@@ -96,6 +96,26 @@ export const messageRepository = {
     return data
   },
 
+  async updateStatusAndSentAt(id: string, userId: string, status: MessageStatus, sentAt: string): Promise<Message | null> {
+    const { data, error } = await supabase
+      .from('messages')
+      .update({
+        status,
+        sent_at: sentAt,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .eq('user_id', userId)
+      .select()
+      .maybeSingle();
+
+    if (error) {
+      console.error('[Repository] updateStatusAndSentAt error:', error.message)
+      return null
+    }
+    return data
+  },
+
   async updateJobId(id: string, userId: string, jobId: string | null): Promise<Message | null> {
     const { data, error } = await supabase
       .from('messages')
@@ -129,6 +149,25 @@ export const messageRepository = {
 
     if (error) {
       console.error('[Repository] updateWaMessageId error:', error.message)
+      return null
+    }
+    return data
+  },
+
+  async updateSentAt(id: string, userId: string, sentAt: string): Promise<Message | null> {
+    const { data, error } = await supabase
+      .from('messages')
+      .update({
+        sent_at: sentAt,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .eq('user_id', userId)
+      .select()
+      .maybeSingle();
+
+    if (error) {
+      console.error('[Repository] updateSentAt error:', error.message)
       return null
     }
     return data

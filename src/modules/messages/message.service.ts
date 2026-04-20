@@ -163,8 +163,9 @@ export const messageService = {
 
     const result = await whatsappService.send(sessionName, message.phone, finalContent)
 
+    const sentAt = new Date().toISOString()
     if (result.success) {
-      await messageRepository.updateStatus(message.id, userId, 'sent')
+      await messageRepository.updateStatusAndSentAt(message.id, userId, 'sent', sentAt)
       await messageRepository.updateWaMessageId(message.id, userId, result.id || null)
       await messageLogRepository.create({
         messageId: message.id,
@@ -358,8 +359,9 @@ export const messageService = {
 
     const result = await whatsappService.send(sessionName, message.phone, finalContent)
 
+    const sentAt = new Date().toISOString()
     if (result.success) {
-      await messageRepository.updateStatus(message.id, userId, 'sent')
+      await messageRepository.updateStatusAndSentAt(message.id, userId, 'sent', sentAt)
       await messageRepository.updateWaMessageId(message.id, userId, result.id || null)
       await messageLogRepository.create({
         messageId: message.id,

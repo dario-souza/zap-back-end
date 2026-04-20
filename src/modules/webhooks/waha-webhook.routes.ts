@@ -8,6 +8,26 @@ const router = Router();
 const RESPOSTAS_SIM = ['sim', 's', 'yes', '1', 'confirmo', 'confirmado', 'vou', 'estarei']
 const RESPOSTAS_NAO = ['não', 'nao', 'n', 'no', '0', 'cancela', 'cancelado', 'nao vou']
 
+const incrementUserStats = async (userId: string): Promise<void> => {
+  // Primeiro tenta atualizar, se não existir cria
+  const { data: existing } = await supabase
+    .from('user_stats')
+    .select('total_sent')
+    .eq('user_id', userId)
+    .single()
+
+  if (existing) {
+    await supabase
+      .from('user_stats')
+      .update({ total_sent: existing.total_sent + 1, updated_at: new Date().toISOString() })
+      .eq('user_id', userId)
+  } else {
+    await supabase
+      .from('user_stats')
+      .insert({ user_id: userId, total_sent: 1 })
+  }
+}
+
 const extractUserIdFromSession = (sessionName: string): string | null => {
   if (!sessionName || !sessionName.startsWith('user_')) return null
   const uuid = sessionName.replace(/^user_/, '')
@@ -86,6 +106,8 @@ async function sendAutomaticResponse(
   
   if (result.success) {
     console.log(`[WAHA] ✓ Mensagem de resposta automática enviada para ${phone}`)
+    // Incrementa o contador total de mensagens enviadas
+    await incrementUserStats(confirmation.user_id)
   } else {
     console.error(`[WAHA] Erro ao enviar mensagem de resposta: ${result.error}`)
   }

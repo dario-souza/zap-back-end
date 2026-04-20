@@ -1,5 +1,6 @@
 import { Response } from 'express'
 import { messageService } from './message.service'
+import { messageHistoryRepository } from './message-history.repository'
 import { asyncHandler } from '../../shared/utils/asyncHandler'
 import { AppError } from '../../shared/errors/AppError'
 import type { AuthRequest } from '../auth/auth.types'
@@ -138,5 +139,44 @@ export const messageController = {
 
     const result = await messageService.sendTest(userId, phone, message)
     res.json(result)
+  }),
+
+  // History endpoints
+  getHistory: asyncHandler(async (req: AuthRequest, res: Response) => {
+    const userId = getUserId(req)
+    const { page = '1', limit = '20', type, search } = req.query
+
+    const result = await messageHistoryRepository.findAll(userId, {
+      page: parseInt(page as string, 10),
+      limit: parseInt(limit as string, 10),
+      type: type as string | undefined,
+      search: search as string | undefined,
+    })
+
+    res.json(result)
+  }),
+
+  getHistoryCount: asyncHandler(async (req: AuthRequest, res: Response) => {
+    const userId = getUserId(req)
+    const count = await messageHistoryRepository.getCount(userId)
+    res.json({ count, limit: 500 })
+  }),
+
+  clearHistory: asyncHandler(async (req: AuthRequest, res: Response) => {
+    const userId = getUserId(req)
+    await messageHistoryRepository.clearAll(userId)
+    res.status(204).send()
+  }),
+
+  getTotalSent: asyncHandler(async (req: AuthRequest, res: Response) => {
+    const userId = getUserId(req)
+    const count = await messageHistoryRepository.getTotalSentCount(userId)
+    res.json({ totalSent: count })
+  }),
+
+  getCountsByType: asyncHandler(async (req: AuthRequest, res: Response) => {
+    const userId = getUserId(req)
+    const counts = await messageHistoryRepository.getCountsByType(userId)
+    res.json(counts)
   }),
 }

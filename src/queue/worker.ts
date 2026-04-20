@@ -213,11 +213,13 @@ async function handleMessageJob(job: Job<JobPayload>) {
   const result = await whatsappService.send(sessionName, phone, finalContent)
 
   if (result.success && result.id) {
+    const sentAt = new Date().toISOString()
     if (messageId) {
-      const updated = await messageRepository.updateStatus(
+      const updated = await messageRepository.updateStatusAndSentAt(
         messageId,
         userId,
         'sent',
+        sentAt,
       )
       if (!updated) {
         console.warn(
