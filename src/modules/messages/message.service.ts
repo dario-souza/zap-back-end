@@ -164,7 +164,9 @@ export const messageService = {
     const result = await whatsappService.send(sessionName, message.phone, finalContent)
 
     const sentAt = new Date().toISOString()
+    
     if (result.success) {
+      // Atualiza status para 'sent' (aciona trigger para histórico, contador e cleanup)
       await messageRepository.updateStatusAndSentAt(message.id, userId, 'sent', sentAt)
       await messageRepository.updateWaMessageId(message.id, userId, result.id || null)
       await messageLogRepository.create({
@@ -316,22 +318,25 @@ export const messageService = {
       throw new Error('Mensagem não encontrada')
     }
 
-    if (message.status !== 'pending' && message.status !== 'scheduled') {
-      throw new Error('Apenas mensagens pendentes podem ser canceladas')
-    }
-
+    // Remove o job da fila se existir
     if (message.job_id) {
       if (message.job_id.startsWith('recurring_')) {
         await messageQueue.removeRecurring(message.job_id)
       } else {
-        const job = await messageQueue.getJob(message.job_id)
-        if (job) {
-          await job.remove()
+        try {
+          const job = await messageQueue.getJob(message.job_id)
+          if (job) {
+            await job.remove()
+          }
+        } catch (e) {
+          // Job pode já ter sido processado
         }
       }
     }
 
-    return messageRepository.update(id, userId, { status: 'cancelled' })
+    // Deleta a mensagem da tabela independente do status
+    await messageRepository.delete(id, userId)
+    return null
   },
 
   async sendNow(id: string, userId: string): Promise<Message> {
@@ -360,7 +365,9 @@ export const messageService = {
     const result = await whatsappService.send(sessionName, message.phone, finalContent)
 
     const sentAt = new Date().toISOString()
+    
     if (result.success) {
+      // Atualiza status para 'sent' (aciona trigger para histórico, contador e cleanup)
       await messageRepository.updateStatusAndSentAt(message.id, userId, 'sent', sentAt)
       await messageRepository.updateWaMessageId(message.id, userId, result.id || null)
       await messageLogRepository.create({

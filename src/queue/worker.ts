@@ -215,6 +215,9 @@ async function handleMessageJob(job: Job<JobPayload>) {
   if (result.success && result.id) {
     const sentAt = new Date().toISOString()
     if (messageId) {
+      const isRecurring = !!recurrenceCron
+
+      // Atualiza status para 'sent' (aciona trigger para histórico, contador e cleanup)
       const updated = await messageRepository.updateStatusAndSentAt(
         messageId,
         userId,
@@ -225,23 +228,26 @@ async function handleMessageJob(job: Job<JobPayload>) {
         console.warn(
           `[Worker] Mensagem ${messageId} não encontrada — pulando update`,
         )
-      } else {
-        await messageRepository.updateWaMessageId(messageId, userId, result.id)
-        await messageLogRepository.create({
+        return { success: true, waMessageId: result.id }
+      }
+      
+      // Registra log do envio
+      await messageLogRepository.create({
+        messageId,
+        userId,
+        event: 'sent',
+        wahaMessageId: result.id,
+      })
+
+      // Para mensagens recorrentes, mantém o registro e agenda próximo envio
+      if (isRecurring) {
+        const nextSendAt = calculateNextSendAt(recurrenceCron)
+        await messageRepository.updateNextSendAt(
           messageId,
           userId,
-          event: 'sent',
-          wahaMessageId: result.id,
-        })
-
-        if (recurrenceCron) {
-          const nextSendAt = calculateNextSendAt(recurrenceCron)
-          await messageRepository.updateNextSendAt(
-            messageId,
-            userId,
-            nextSendAt.toISOString(),
-          )
-        }
+          nextSendAt.toISOString(),
+        )
+        console.log(`[Worker] Mensagem ${messageId} é recorrente — mantida na tabela`)
 
         if (isFirstJob && schedulerId && cronPatternUTC) {
           console.log(`[Worker] Primeiro job enviado, criando scheduler para próximas execuções`)
