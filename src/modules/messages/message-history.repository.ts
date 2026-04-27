@@ -6,7 +6,7 @@ export interface MessageHistory {
   user_id: string;
   phone: string;
   content: string | null;
-  type: 'normal' | 'scheduled' | 'recurring';
+  type: 'normal' | 'scheduled' | 'recurring' | 'confirmation';
   sent_at: string | null;
   created_at: string;
 }
@@ -47,7 +47,7 @@ export const messageHistoryRepository = {
     }
 
     const { data, error, count } = await query
-      .order('sent_at', { ascending: false })
+      .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
 
     if (error) throw error;
