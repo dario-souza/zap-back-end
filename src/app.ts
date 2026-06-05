@@ -12,6 +12,8 @@ import { authRoutes } from './modules/auth/auth.routes'
 import { userRoutes } from './modules/users/user.routes'
 import { errorHandler } from './shared/errors/errorHandler'
 import { wahaWebhookRoutes } from './modules/webhooks/waha-webhook.routes'
+import { billingRoutes } from './modules/billing/billing.routes'
+import { billingWebhookRoutes } from './modules/billing/webhook.routes'
 import { env } from './config/env'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -35,12 +37,17 @@ app.use(express.json())
 
 app.use(express.static(path.join(__dirname, '../public')))
 
+// Webhooks públicos (sem auth)
+app.use('/api/webhooks/waha', wahaWebhookRoutes)
+app.use('/api/billing/webhook', billingWebhookRoutes)
+
+// Rotas autenticadas
 app.use('/api/messages', messageRoutes)
 app.use('/api/contacts', contactRoutes)
 app.use('/api/sessions', sessionRoutes)
 app.use('/api/templates', templateRoutes)
 app.use('/api/confirmations', confirmationRoutes)
-app.use('/api/webhooks/waha', wahaWebhookRoutes)
+app.use('/api/billing', billingRoutes)
 app.use('/api/auth', authRoutes)
 app.use('/api/users', userRoutes)
 

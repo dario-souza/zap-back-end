@@ -135,6 +135,59 @@ export const whatsappService = {
     }
   },
 
+  async sendImage(sessionName: string, phone: string, imageDataUrl: string, caption?: string): Promise<{ success: boolean; id?: string; error?: string }> {
+    try {
+      const chatId = formatPhoneToChatId(phone)
+
+      const statusCheck = await fetch(`${WAHA_URL}/api/sessions/${sessionName}`, {
+        method: 'GET',
+        headers: getHeaders(),
+      })
+
+      if (!statusCheck.ok) {
+        return { success: false, error: 'Sessão não encontrada' }
+      }
+
+      const statusData = (await statusCheck.json()) as { status?: string }
+      if (statusData.status !== 'WORKING') {
+        return { success: false, error: `Sessão ${statusData.status}` }
+      }
+
+      // aceita data URL (data:image/png;base64,XXX) ou URL direta
+      const isDataUrl = imageDataUrl.startsWith('data:')
+      const file = isDataUrl
+        ? (() => {
+            const [meta, b64] = imageDataUrl.split(',')
+            const mimetype = meta.match(/data:(.*?);base64/)?.[1] || 'image/png'
+            return { data: b64, mimetype, filename: 'pix.png' }
+          })()
+        : { url: imageDataUrl }
+
+      const response = await fetch(`${WAHA_URL}/api/sendImage`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({
+          session: sessionName,
+          chatId,
+          file,
+          caption: caption || '',
+        }),
+      })
+
+      if (!response.ok) {
+        const error = await response.text()
+        console.error('[WAHA] Erro ao enviar imagem:', error)
+        return { success: false, error }
+      }
+
+      const data = (await response.json()) as { key?: { id?: string } }
+      return { success: true, id: data.key?.id }
+    } catch (error) {
+      console.error('[WAHA] Erro na requisição de imagem:', error)
+      return { success: false, error: String(error) }
+    }
+  },
+
   async sendPoll(sessionName: string, phone: string, pollName: string, options: string[], multipleAnswers: boolean = false): Promise<{ success: boolean; id?: string; error?: string }> {
     try {
       const chatId = formatPhoneToChatId(phone)

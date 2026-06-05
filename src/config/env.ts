@@ -22,4 +22,12 @@ export const env = {
   WAHA_SESSION_NAME: process.env.WAHA_SESSION_NAME ?? 'default',
   WAHA_WEBHOOK_URL: required('WAHA_WEBHOOK_URL'),
   JWT_SECRET: required('JWT_SECRET'),
+
+  MP_ACCESS_TOKEN: required('MP_ACCESS_TOKEN'),
+  MP_PUBLIC_KEY: required('MP_PUBLIC_KEY'),
+  MP_PLAN_STARTER_ID: required('MP_PLAN_STARTER_ID'),
+  MP_PLAN_PRO_ID: required('MP_PLAN_PRO_ID'),
+  MP_WEBHOOK_URL: required('MP_WEBHOOK_URL'),
+  MP_TRIAL_DAYS: Number(process.env.MP_TRIAL_DAYS ?? 7),
+  MP_FRONTEND_URL: process.env.MP_FRONTEND_URL ?? 'http://localhost:3000',
 }

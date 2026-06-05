@@ -282,4 +282,9 @@ async function handleMessageJob(job: Job<JobPayload>) {
   }
 }
 
+import { pixRenewalWorker } from './pixRenewal.worker.ts'
+
 messageWorker.start()
+pixRenewalWorker.start().catch((err) => {
+  console.error('[Worker] Falha ao iniciar pixRenewalWorker:', err)
+})
