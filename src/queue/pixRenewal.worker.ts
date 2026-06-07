@@ -23,7 +23,7 @@ export const pixRenewalWorker = {
     if (worker) return
 
     // Cria uma Queue própria (mesma conexão Redis) para registrar o scheduler.
-    schedulerQueue = new Queue('messages', { connection: redisConnection as any })
+    schedulerQueue = new Queue('pix-renewal', { connection: redisConnection as any })
 
     await schedulerQueue.upsertJobScheduler(
       PIX_RENEWAL_SCHEDULER_ID,
@@ -39,7 +39,7 @@ export const pixRenewalWorker = {
     )
 
     worker = new Worker(
-      'messages',
+      'pix-renewal',
       async (job: Job) => {
         if (job.name !== PIX_RENEWAL_JOB_NAME) return
         await runPixRenewalCheck()

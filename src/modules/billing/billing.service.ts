@@ -1,7 +1,6 @@
 import { billingRepository } from './billing.repository.ts'
 import { mercadopago } from './mercadopago.ts'
 import { supabase } from '../../config/supabase.ts'
-import { env } from '../../config/env.ts'
 import { AppError } from '../../shared/errors/AppError.ts'
 import { PLANS } from './billing.types.ts'
 import type {
@@ -9,11 +8,6 @@ import type {
   Subscription,
   PaymentMethod,
 } from './billing.types.ts'
-
-const PLAN_TO_MP_ID: Record<'starter' | 'pro', string> = {
-  starter: env.MP_PLAN_STARTER_ID,
-  pro: env.MP_PLAN_PRO_ID,
-}
 
 const PLAN_TO_AMOUNT: Record<'starter' | 'pro', number> = {
   starter: 39.9,
@@ -46,15 +40,15 @@ export const billingService = {
     plan: 'starter' | 'pro',
     backUrl: string,
   ): Promise<{ init_point: string; preapproval_id: string }> {
-    const preapprovalPlanId = PLAN_TO_MP_ID[plan]
-    if (!preapprovalPlanId) {
-      throw new AppError(`Plano MP não configurado para ${plan}`, 500)
+    const amount = PLAN_TO_AMOUNT[plan]
+    if (!amount) {
+      throw new AppError(`Plano inválido: ${plan}`, 400)
     }
 
     const email = await getUserEmail(userId)
 
     const { id, init_point } = await mercadopago.createCardSubscription({
-      preapprovalPlanId,
+      amount,
       payerEmail: email,
       userId,
       backUrl,

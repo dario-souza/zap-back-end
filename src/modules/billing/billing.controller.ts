@@ -4,6 +4,7 @@ import { asyncHandler } from '../../shared/utils/asyncHandler.ts'
 import { AppError } from '../../shared/errors/AppError.ts'
 import type { AuthRequest } from '../auth/auth.types.ts'
 import { billingRepository } from './billing.repository.ts'
+import { env } from '../../config/env.ts'
 
 const getUserId = (req: AuthRequest): string => {
   if (!req.user?.id) {
@@ -32,9 +33,7 @@ export const billingController = {
       throw new AppError('Plano inválido', 400)
     }
 
-    const backUrl =
-      (req.body?.back_url as string | undefined) ||
-      `${req.protocol}://${req.get('host')}/dashboard/planos?status=success`
+    const backUrl = `${env.MP_FRONTEND_URL}/dashboard/planos?status=success`
 
     const result = await billingService.checkoutCard(userId, plan, backUrl)
     res.status(201).json(result)

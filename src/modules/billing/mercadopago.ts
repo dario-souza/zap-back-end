@@ -10,7 +10,7 @@ const preapproval = new PreApproval(mpClient)
 const payment = new Payment(mpClient)
 
 export interface CreatePreapprovalInput {
-  preapprovalPlanId: string
+  amount: number
   payerEmail: string
   userId: string
   backUrl: string
@@ -21,15 +21,22 @@ export const mercadopago = {
     id: string
     init_point: string
   }> {
+    // A SDK não tipa `notification_url` em preapprovals, mas a API do MP aceita.
     const result = await preapproval.create({
       body: {
-        preapproval_plan_id: input.preapprovalPlanId,
         reason: 'Assinatura ZapReminder',
         external_reference: input.userId,
         payer_email: input.payerEmail,
         back_url: input.backUrl,
+        notification_url: env.MP_WEBHOOK_URL,
         status: 'pending',
-      },
+        auto_recurring: {
+          frequency: 1,
+          frequency_type: 'months',
+          transaction_amount: input.amount,
+          currency_id: 'BRL',
+        },
+      } as any,
     })
 
     const id = String(result.id || '')
